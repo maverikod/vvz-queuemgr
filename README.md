@@ -100,3 +100,4 @@ MIT License - see LICENSE file for details.
 ## Author
 
 Vasiliy Zdanovskiy - vasilyvz@gmail.com
+# vvz-queuemgr
