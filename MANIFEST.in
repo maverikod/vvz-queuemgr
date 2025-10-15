@@ -1,0 +1,15 @@
+include README.md
+include LICENSE
+include SERVICE_README.md
+include QUICK_START.md
+include requirements.txt
+include install.sh
+include queuemgr.service
+recursive-include queuemgr/examples *.py
+recursive-include docs *.md
+recursive-include tests *.py
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude *.log
+global-exclude *.pid
+global-exclude *.jsonl

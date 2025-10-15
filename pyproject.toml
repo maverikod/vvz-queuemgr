@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "queuemgr"
+version = "1.0.0"
+authors = [
+    {name = "Vasiliy Zdanovskiy", email = "vasilyvz@gmail.com"},
+]
+description = "Full-featured job queue system with multiprocessing support for Linux"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Scientific/Engineering",
+]
+keywords = ["job-queue", "multiprocessing", "task-scheduler", "linux", "systemd"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+web = [
+    "flask>=2.0.0",
+]
+examples = [
+    "requests>=2.25.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/vasilyvz/queuemgr"
+Repository = "https://github.com/vasilyvz/queuemgr"
+Documentation = "https://github.com/vasilyvz/queuemgr#readme"
+"Bug Tracker" = "https://github.com/vasilyvz/queuemgr/issues"
+
+[project.scripts]
+queuemgr-daemon = "queuemgr.service.daemon:main"
+queuemgr-cli = "queuemgr.service.cli:main"
+queuemgr-web = "queuemgr.service.web:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py310', 'py311', 'py312']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

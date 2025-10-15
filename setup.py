@@ -12,25 +12,34 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="queuemgr",
-    version="0.1.0",
+    version="1.0.0",
     author="Vasiliy Zdanovskiy",
     author_email="vasilyvz@gmail.com",
-    description="A Python-based job queue system with per-job processes and signal variables",
+    description="Full-featured job queue system with multiprocessing support for Linux",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/vasilyvz/queuemgr",
+    project_urls={
+        "Bug Reports": "https://github.com/vasilyvz/queuemgr/issues",
+        "Source": "https://github.com/vasilyvz/queuemgr",
+        "Documentation": "https://github.com/vasilyvz/queuemgr#readme",
+    },
     packages=find_packages(),
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
+        "Intended Audience :: System Administrators",
         "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
+        "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: System :: Distributed Computing",
+        "Topic :: System :: Systems Administration",
+        "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+        "Topic :: Scientific/Engineering",
     ],
     python_requires=">=3.10",
     install_requires=[
@@ -44,13 +53,18 @@ setup(
             "flake8>=6.0.0",
             "mypy>=1.0.0",
         ],
+        "web": [
+            "flask>=2.0.0",
+        ],
         "examples": [
-            "uuid>=1.30",
+            "requests>=2.25.0",
         ],
     },
     entry_points={
         "console_scripts": [
-            "queuemgr-example=queuemgr.examples.simple_job:main",
+            "queuemgr-daemon=queuemgr.service.daemon:main",
+            "queuemgr-cli=queuemgr.service.cli:main",
+            "queuemgr-web=queuemgr.service.web:main",
         ],
     },
 )
