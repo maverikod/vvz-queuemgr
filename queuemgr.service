@@ -1,0 +1,30 @@
+[Unit]
+Description=Queue Manager Service
+Documentation=https://github.com/vasilyvz/queuemgr
+After=network.target
+
+[Service]
+Type=forking
+User=queuemgr
+Group=queuemgr
+WorkingDirectory=/opt/queuemgr
+ExecStart=/opt/queuemgr/.venv/bin/python -m queuemgr.service.daemon start --daemon
+ExecStop=/opt/queuemgr/.venv/bin/python -m queuemgr.service.daemon stop
+ExecReload=/opt/queuemgr/.venv/bin/python -m queuemgr.service.daemon restart
+PIDFile=/var/run/queuemgr/daemon.pid
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/queuemgr /var/log/queuemgr /var/run/queuemgr
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
