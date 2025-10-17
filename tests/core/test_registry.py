@@ -9,6 +9,8 @@ email: vasilyvz@gmail.com
 import json
 import os
 import tempfile
+import threading
+import time
 from datetime import datetime
 from queuemgr.core.registry import JsonlRegistry
 from queuemgr.core.types import JobRecord, JobStatus
@@ -287,7 +289,6 @@ class TestJsonlRegistry:
     
     def test_malformed_json_lines(self):
         """Test handling of malformed JSON lines."""
-        from datetime import datetime
         
         # Create a registry file with malformed lines
         now = datetime.now().isoformat()
@@ -305,8 +306,6 @@ class TestJsonlRegistry:
     
     def test_concurrent_access(self):
         """Test concurrent access to registry."""
-        import threading
-        import time
         
         results = []
         

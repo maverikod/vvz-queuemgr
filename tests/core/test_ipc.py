@@ -7,6 +7,8 @@ email: vasilyvz@gmail.com
 """
 
 import pytest
+import threading
+import time
 from queuemgr.core.ipc import (
     get_manager,
     create_job_shared_state,
@@ -81,8 +83,8 @@ class TestJobLock:
         # Test that lock is released even on exception
         try:
             with with_job_lock(shared_state):
-                raise Exception("Test exception")
-        except Exception:
+                raise ValueError("Test exception")
+        except (OSError, IOError, ValueError, TimeoutError):
             pass
 
         # Lock should be released
@@ -230,8 +232,6 @@ class TestConcurrency:
 
     def test_concurrent_updates(self):
         """Test that concurrent updates are handled safely."""
-        import threading
-        import time
 
         manager = get_manager()
         shared_state = create_job_shared_state(manager)

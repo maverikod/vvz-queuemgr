@@ -1,0 +1,504 @@
+ApiCallJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+CalculationJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+CodeAnalyzer:
+- __init__
+- analyze_file
+- _has_file_docstring
+- _analyze_ast
+- _analyze_class
+- _analyze_function
+- _analyze_method
+- _has_pass_statement
+- _has_not_implemented_error
+- _is_abstract_method
+- _analyze_import
+- _analyze_import_from
+CodeMapper:
+- __init__
+- analyze_directory
+- generate_reports
+CodeReporter:
+- __init__
+- generate_code_map
+- generate_issues_report
+- generate_method_index
+- print_summary
+DataAnalyzerJob:
+- __init__
+- execute
+- _perform_analysis
+- _basic_analysis
+- _statistical_analysis
+- _pattern_analysis
+- _clustering_analysis
+- _generate_summary
+- on_start
+- on_stop
+- on_end
+- on_error
+DataProcessingJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+DataProcessorJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+ErrorHandlingJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+FileAnalysisJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+FileOperationJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+IPCError:
+- __init__
+InvalidJobStateError:
+- __init__
+- __init__
+IssueDetector:
+- __init__
+- check_method_issues
+- _check_any_type_usage
+- _check_generic_exception_usage
+- _check_statement_for_generic_exception
+- check_imports_in_middle
+JobAlreadyExistsError:
+- __init__
+- __init__
+JobCommand: []
+JobExecutionError:
+- __init__
+- __init__
+JobNotFoundError:
+- __init__
+- __init__
+JobQueue:
+- __init__
+- get_jobs
+- get_job_status
+- add_job
+- delete_job
+- start_job
+- stop_job
+- suspend_job
+- get_job_count
+- get_running_jobs
+- get_job_by_id
+- list_job_statuses
+- cleanup_completed_jobs
+- shutdown
+JobRecord:
+- __post_init__
+JobStatus: []
+JsonlRegistry:
+- __init__
+- _create_file_lock
+- _load_existing_records
+- _serialize_record
+- _deserialize_record
+- append
+- latest
+- all_latest
+- get_job_history
+- clear
+LargeDataGeneratorJob:
+- __init__
+- execute
+- _generate_text_data
+- _generate_number_data
+- _generate_json_data
+- _generate_mixed_data
+- _calculate_compression_ratio
+- on_start
+- on_stop
+- on_end
+- on_error
+LinuxJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+NotificationJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+ProcIPC:
+- __init__
+- send_command
+- wait_for_ready
+- is_ready
+ProcManager:
+- __init__
+- start
+- stop
+- is_running
+- add_job
+- start_job
+- stop_job
+- delete_job
+- get_job_status
+- list_jobs
+- _send_command
+- _wait_for_ready
+- _cleanup
+- _manager_process
+- _process_command
+ProcManagerConfig: []
+ProcQueueSystem:
+- __init__
+- start
+- stop
+- is_running
+- add_job
+- start_job
+- stop_job
+- delete_job
+- get_job_status
+- list_jobs
+- _ensure_running
+- _cleanup
+- _signal_handler
+ProcessControlError:
+- __init__
+- __init__
+ProcessManager:
+- __init__
+- start
+- stop
+- is_running
+- add_job
+- start_job
+- stop_job
+- delete_job
+- get_job_status
+- list_jobs
+- _send_command
+- _manager_process
+ProcessManagerConfig: []
+ProcessManagerContext:
+- __init__
+- __enter__
+- __exit__
+ProgressJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+QueueJobBase:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+- set_result
+- _set_registry
+- _set_shared_state
+- get_status
+- is_running
+- start_process
+- stop_process
+- terminate_process
+- _job_loop
+- _handle_stop
+- _handle_delete
+- _handle_completion
+- _handle_error
+- _write_to_registry
+QueueManagerCLI:
+- __init__
+- start_service
+- stop_service
+- service_status
+- add_job
+- start_job
+- stop_job
+- delete_job
+- list_jobs
+- job_status
+- monitor_jobs
+- _import_job_class
+QueueManagerDaemon:
+- __init__
+- _load_config
+- _setup_logging
+- start
+- stop
+- restart
+- status
+- _create_directories
+- _setup_signal_handlers
+- _daemon_loop
+QueueManagerError: []
+QueueManagerWebAPI:
+- __init__
+- get_service_status
+- start_service
+- stop_service
+- get_jobs
+- get_job_status
+- start_job
+- stop_job
+- delete_job
+- add_job
+- _import_job_class
+QueueSystem:
+- __init__
+- start
+- stop
+- is_running
+- add_job
+- start_job
+- stop_job
+- delete_job
+- get_job_status
+- list_jobs
+- _ensure_running
+- _cleanup
+- _signal_handler
+Registry:
+- append
+- latest
+- all_latest
+RegistryDemoJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+RegistryError:
+- __init__
+- __init__
+ReportGeneratorJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+ServiceExample:
+- __init__
+- run_example
+- _run_with_context_manager
+- _run_manual_management
+- _run_batch_processing
+SimpleJob:
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+- __init__
+- execute
+- on_start
+- on_stop
+- on_end
+- on_error
+TestConcurrency:
+- test_concurrent_updates
+TestExceptionHierarchy:
+- test_exception_inheritance
+- test_exception_chaining
+TestIPCManager:
+- test_get_manager
+- test_create_job_shared_state
+TestInvalidJobStateError:
+- test_invalid_job_state_error_creation
+TestJob:
+- __init__
+- execute
+- __init__
+- execute
+- __init__
+- execute
+- __init__
+- execute
+- __init__
+- execute
+TestJobAlreadyExistsError:
+- test_job_already_exists_error_creation
+TestJobCommand:
+- test_job_command_values
+- test_job_command_names
+TestJobCommands:
+- test_set_command
+- test_get_command
+- test_clear_command
+TestJobExecutionError:
+- test_job_execution_error_creation
+- test_job_execution_error_with_original
+TestJobLock:
+- test_with_job_lock_context_manager
+- test_with_job_lock_exception_handling
+TestJobNotFoundError:
+- test_job_not_found_error_creation
+TestJobQueueBasic:
+- test_queue_initialization
+- test_get_jobs_empty
+- test_get_jobs_with_jobs
+- test_get_job_status_not_found
+- test_get_job_status_found
+- test_add_job_success
+- test_add_job_already_exists
+- test_delete_job_not_found
+- test_delete_job_not_running
+- test_get_job_count
+- test_get_running_jobs
+- test_get_job_by_id
+- test_list_job_statuses
+TestJobQueueOperations:
+- test_start_job_not_found
+- test_start_job_invalid_state
+- test_start_job_already_running
+- test_start_job_success
+- test_start_job_process_failure
+- test_stop_job_not_found
+- test_stop_job_not_running
+- test_stop_job_success
+- test_stop_job_failure
+- test_suspend_job
+- test_cleanup_completed_jobs
+- test_shutdown
+- test_shutdown_with_terminate
+TestJobRecord:
+- test_job_record_creation
+- test_job_record_immutable
+- test_job_record_validation_job_id
+- test_job_record_validation_progress
+- test_job_record_validation_status
+- test_job_record_validation_timestamps
+- test_job_record_with_result
+TestJobStateReading:
+- test_read_job_state_initial
+- test_read_job_state_after_update
+TestJobStateUpdates:
+- test_update_job_state_single_field
+- test_update_job_state_multiple_fields
+- test_update_job_state_with_result
+- test_update_job_state_invalid_progress
+TestJobStatus:
+- test_job_status_values
+- test_job_status_names
+TestJsonlRegistry:
+- setup_method
+- teardown_method
+- test_registry_initialization
+- test_append_single_record
+- test_append_multiple_records
+- test_append_update_same_job
+- test_latest_existing_job
+- test_latest_nonexistent_job
+- test_all_latest_empty
+- test_all_latest_multiple_jobs
+- test_get_job_history
+- test_get_job_history_nonexistent
+- test_clear_registry
+- test_load_existing_records
+- test_malformed_json_lines
+- test_concurrent_access
+TestProcessControlError:
+- test_process_control_error_creation
+- test_process_control_error_with_original
+TestQueueJobBaseInitialization:
+- test_job_initialization
+- test_job_initialization_invalid_job_id
+- test_set_registry
+- test_set_shared_state
+- test_get_status_no_shared_state
+- test_get_status_with_shared_state
+- test_is_running_no_process
+- test_is_running_with_process
+TestQueueJobBaseJobLoop:
+- test_job_loop_start_command
+- test_job_loop_stop_command
+- test_job_loop_delete_command
+- test_job_loop_execution_error
+- test_job_loop_stop_error
+- test_job_loop_end_error
+- test_job_loop_error_handler_error
+TestQueueJobBaseProcessControl:
+- test_start_process_success
+- test_start_process_already_running
+- test_start_process_failure
+- test_stop_process_not_running
+- test_stop_process_success
+- test_stop_process_with_timeout
+- test_stop_process_timeout_exceeded
+- test_terminate_process_not_running
+- test_terminate_process_success
+- test_terminate_process_force_kill
+- test_terminate_process_failure
+TestQueueManagerError:
+- test_base_error_creation
+TestRegistryError:
+- test_registry_error_creation
+- test_registry_error_with_original
+TestTimeoutError:
+- test_timeout_error_creation
+TestValidationError:
+- test_validation_error_creation
+TimeoutError:
+- __init__
+ValidationError:
+- __init__
+- __init__

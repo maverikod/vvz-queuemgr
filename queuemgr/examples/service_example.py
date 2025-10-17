@@ -12,17 +12,29 @@ import sys
 import time
 from pathlib import Path
 
+from queuemgr.proc_api import (
+    proc_queue_system,
+    start_proc_queue_system,
+    stop_proc_queue_system,
+    get_proc_queue_system,
+)
+from queuemgr.jobs.base import QueueJobBase
+
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from queuemgr.proc_api import proc_queue_system
-from queuemgr.jobs.base import QueueJobBase
 
 
 class DataProcessorJob(QueueJobBase):
     """Job for processing data files."""
 
     def __init__(self, job_id: str, params: dict):
+        """
+        Initialize DataProcessorJob.
+
+        Args:
+            job_id: Unique job identifier.
+            params: Job parameters.
+        """
         super().__init__(job_id, params)
         self.input_file = params.get("input_file")
         self.output_file = params.get("output_file")
@@ -69,6 +81,13 @@ class ReportGeneratorJob(QueueJobBase):
     """Job for generating reports."""
 
     def __init__(self, job_id: str, params: dict):
+        """
+        Initialize ReportGeneratorJob.
+
+        Args:
+            job_id: Unique job identifier.
+            params: Job parameters.
+        """
         super().__init__(job_id, params)
         self.report_type = params.get("report_type", "summary")
         self.data_source = params.get("data_source", "database")
@@ -117,6 +136,13 @@ class NotificationJob(QueueJobBase):
     """Job for sending notifications."""
 
     def __init__(self, job_id: str, params: dict):
+        """
+        Initialize NotificationJob.
+
+        Args:
+            job_id: Unique job identifier.
+            params: Job parameters.
+        """
         super().__init__(job_id, params)
         self.recipient = params.get("recipient")
         self.message = params.get("message", "Notification from Queue Manager")
@@ -254,7 +280,6 @@ class ServiceExample:
 
     def _run_manual_management(self):
         """Run example with manual service management."""
-        from queuemgr.proc_api import start_proc_queue_system, stop_proc_queue_system
 
         try:
             # Start service manually
@@ -265,7 +290,6 @@ class ServiceExample:
             print("🔧 Service started manually")
 
             # Get queue instance
-            from queuemgr.proc_api import get_proc_queue_system
 
             queue = get_proc_queue_system()
 

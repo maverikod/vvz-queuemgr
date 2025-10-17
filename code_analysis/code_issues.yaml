@@ -1,0 +1,22 @@
+issues:
+  any_type_usage: []
+  classes_without_docstrings: []
+  files_too_large: []
+  files_without_docstrings: []
+  generic_exception_usage: []
+  imports_in_middle: []
+  methods_with_pass: []
+  methods_without_docstrings: []
+  not_implemented_in_non_abstract: []
+summary:
+  any_type_usage: 0
+  classes_without_docstrings: 0
+  files_too_large: 0
+  files_without_docstrings: 0
+  generic_exception_usage: 0
+  imports_in_middle: 0
+  max_lines_limit: 400
+  methods_with_pass: 0
+  methods_without_docstrings: 0
+  not_implemented_in_non_abstract: 0
+  total_issues: 0

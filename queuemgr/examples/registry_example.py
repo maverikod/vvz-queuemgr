@@ -9,11 +9,11 @@ import time
 import uuid
 from typing import Any, Dict
 
-from ..queue.job_queue import JobQueue
-from ..core.registry import JsonlRegistry
-from ..core.types import JobStatus
-from ..jobs.base import QueueJobBase
-from ..core.ipc import update_job_state
+from queuemgr.queue.job_queue import JobQueue
+from queuemgr.core.registry import JsonlRegistry
+from queuemgr.core.types import JobStatus
+from queuemgr.jobs.base import QueueJobBase
+from queuemgr.core.ipc import update_job_state
 
 
 class RegistryDemoJob(QueueJobBase):

@@ -10,16 +10,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, Mapping, Optional
 
-from ..core.types import JobId, JobRecord, JobStatus, JobCommand
-from ..jobs.base import QueueJobBase
-from ..core.registry import Registry
-from ..core.ipc import get_manager, create_job_shared_state
-from ..exceptions import (
+from queuemgr.core.types import JobId, JobRecord, JobStatus, JobCommand
+from queuemgr.jobs.base import QueueJobBase
+from queuemgr.core.registry import Registry
+from queuemgr.core.ipc import get_manager, create_job_shared_state, set_command
+from .exceptions import (
     JobNotFoundError,
     JobAlreadyExistsError,
     InvalidJobStateError,
-    ProcessControlError,
 )
+from ..core.exceptions import ProcessControlError
 
 
 class JobQueue:
@@ -193,8 +193,9 @@ class JobQueue:
         try:
             job.start_process()
             # Send START command to the job
-            from ..core.ipc import set_command
-            set_command(job._shared_state, JobCommand.START)
+
+            if job._shared_state is not None:
+                set_command(job._shared_state, JobCommand.START)
         except ProcessControlError as e:
             raise ProcessControlError(job_id, "start", e)
 

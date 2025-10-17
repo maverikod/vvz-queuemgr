@@ -13,7 +13,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
-from .types import JobId, JobRecord
+from .types import JobId, JobRecord, JobStatus
+from .exceptions import RegistryError
 
 
 class Registry(ABC):
@@ -96,7 +97,7 @@ class JsonlRegistry(Registry):
         # Load existing records
         self._load_existing_records()
 
-    def _create_file_lock(self):
+    def _create_file_lock(self) -> object:  # fcntl module
         """Create a file lock for thread safety."""
         import fcntl
 
@@ -122,8 +123,6 @@ class JsonlRegistry(Registry):
                         # Skip malformed lines but continue loading
                         continue
         except IOError as e:
-            from ..exceptions import RegistryError
-
             raise RegistryError(f"Failed to load existing records: {e}", e)
 
     def _serialize_record(self, record: JobRecord) -> Dict[str, Any]:
@@ -140,7 +139,6 @@ class JsonlRegistry(Registry):
 
     def _deserialize_record(self, data: Dict[str, Any]) -> JobRecord:
         """Deserialize a dictionary to a JobRecord."""
-        from .types import JobStatus
 
         return JobRecord(
             job_id=data["job_id"],
@@ -182,7 +180,7 @@ class JsonlRegistry(Registry):
             self._latest_records[record.job_id] = record
 
         except (IOError, OSError, json.JSONDecodeError) as e:
-            from ..exceptions import RegistryError
+            from .exceptions import RegistryError
 
             raise RegistryError(f"Failed to append record: {e}", e)
 
@@ -245,7 +243,7 @@ class JsonlRegistry(Registry):
             return records
 
         except IOError as e:
-            from ..exceptions import RegistryError
+            from .exceptions import RegistryError
 
             raise RegistryError(f"Failed to get job history: {e}", e)
 
@@ -261,6 +259,6 @@ class JsonlRegistry(Registry):
                 os.remove(self.path)
             self._latest_records.clear()
         except OSError as e:
-            from ..exceptions import RegistryError
+            from .exceptions import RegistryError
 
             raise RegistryError(f"Failed to clear registry: {e}", e)

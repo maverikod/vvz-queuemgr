@@ -12,7 +12,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="queuemgr",
-    version="1.0.0",
+    version="1.0.3",
     author="Vasiliy Zdanovskiy",
     author_email="vasilyvz@gmail.com",
     description="Full-featured job queue system with multiprocessing support for Linux",
@@ -62,9 +62,9 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "queuemgr-daemon=queuemgr.service.daemon:main",
-            "queuemgr-cli=queuemgr.service.cli:main",
-            "queuemgr-web=queuemgr.service.web:main",
+            "queuemgr-daemon=queuemgr.examples.integration_examples.systemd_integration:main",
+            "queuemgr-cli=queuemgr.examples.integration_examples.cli_integration:main",
+            "queuemgr-web=queuemgr.examples.integration_examples.flask_integration:main",
         ],
     },
 )

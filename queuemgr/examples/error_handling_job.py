@@ -9,9 +9,11 @@ import time
 import uuid
 from typing import Any, Dict
 
-from ..jobs.base import QueueJobBase
-from ..core.types import JobStatus
-from ..core.ipc import update_job_state
+from queuemgr.jobs.base import QueueJobBase
+from queuemgr.core.types import JobStatus
+from queuemgr.core.ipc import update_job_state
+from queuemgr.queue.job_queue import JobQueue
+from queuemgr.core.registry import JsonlRegistry
 
 
 class ErrorHandlingJob(QueueJobBase):
@@ -92,8 +94,6 @@ class ErrorHandlingJob(QueueJobBase):
 
 def main():
     """Example usage of ErrorHandlingJob."""
-    from ..queue.job_queue import JobQueue
-    from ..core.registry import JsonlRegistry
 
     # Create registry and queue
     registry = JsonlRegistry("examples/error_handling_registry.jsonl")

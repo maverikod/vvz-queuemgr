@@ -1,8 +1,8 @@
 """
-Command Line Interface for Queue Manager Service.
+CLI Integration Example for Queue Manager.
 
-This module provides a CLI for managing the queue system,
-including job management and system monitoring.
+This example demonstrates how to create a command-line interface for Queue Manager.
+Shows how to integrate job management into CLI applications.
 
 Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
@@ -12,12 +12,9 @@ import json
 import time
 from typing import Dict, Any
 
-from ..proc_api import (
-    get_proc_queue_system,
-    start_proc_queue_system,
-    stop_proc_queue_system,
-)
-from ..exceptions import ProcessControlError
+from queuemgr.proc_manager import ProcManager
+from queuemgr.exceptions import ProcessControlError
+from queuemgr.jobs.base import QueueJobBase
 
 
 class QueueManagerCLI:
@@ -39,7 +36,7 @@ class QueueManagerCLI:
     ) -> None:
         """Start the queue service."""
         try:
-            start_proc_queue_system(registry_path, proc_dir)
+            self.queue.start(registry_path, proc_dir)
             print("✅ Queue service started successfully")
         except ProcessControlError as e:
             print(f"❌ Failed to start service: {e}")
@@ -47,7 +44,7 @@ class QueueManagerCLI:
     def stop_service(self) -> None:
         """Stop the queue service."""
         try:
-            stop_proc_queue_system()
+            self.queue.stop()
             print("✅ Queue service stopped successfully")
         except ProcessControlError as e:
             print(f"❌ Failed to stop service: {e}")
@@ -55,7 +52,7 @@ class QueueManagerCLI:
     def service_status(self) -> None:
         """Show service status."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
             if queue.is_running():
                 print("✅ Queue service is running")
 
@@ -75,7 +72,7 @@ class QueueManagerCLI:
     def add_job(self, job_class_name: str, job_id: str, params: Dict[str, Any]) -> None:
         """Add a job to the queue."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
 
             # Import job class
             job_class = self._import_job_class(job_class_name)
@@ -83,13 +80,13 @@ class QueueManagerCLI:
             queue.add_job(job_class, job_id, params)
             print(f"✅ Job '{job_id}' added successfully")
 
-        except Exception as e:
+        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             print(f"❌ Failed to add job: {e}")
 
     def start_job(self, job_id: str) -> None:
         """Start a job."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
             queue.start_job(job_id)
             print(f"✅ Job '{job_id}' started successfully")
 
@@ -99,7 +96,7 @@ class QueueManagerCLI:
     def stop_job(self, job_id: str) -> None:
         """Stop a job."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
             queue.stop_job(job_id)
             print(f"✅ Job '{job_id}' stopped successfully")
 
@@ -109,7 +106,7 @@ class QueueManagerCLI:
     def delete_job(self, job_id: str, force: bool = False) -> None:
         """Delete a job."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
             queue.delete_job(job_id, force)
             print(f"✅ Job '{job_id}' deleted successfully")
 
@@ -119,7 +116,7 @@ class QueueManagerCLI:
     def list_jobs(self, status_filter: str | None = None) -> None:
         """List all jobs."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
             jobs = queue.list_jobs()
 
             if status_filter:
@@ -148,7 +145,7 @@ class QueueManagerCLI:
     def job_status(self, job_id: str) -> None:
         """Show detailed job status."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
             status = queue.get_job_status(job_id)
 
             print(f"📊 Job Status: {job_id}")
@@ -162,7 +159,7 @@ class QueueManagerCLI:
     def monitor_jobs(self, interval: int = 5) -> None:
         """Monitor jobs in real-time."""
         try:
-            queue = get_proc_queue_system()
+            queue = self.queue
 
             print(f"🔍 Monitoring jobs (refresh every {interval}s, Ctrl+C to stop)...")
             print("-" * 80)
@@ -188,26 +185,52 @@ class QueueManagerCLI:
         """Import job class by name."""
         # This is a simplified version - in practice, you'd need
         # a registry of available job classes
-        from ..jobs.base import QueueJobBase
 
         # For demo purposes, return a simple job class
         class SimpleJob(QueueJobBase):
+            """Simple job for demonstration."""
+
             def __init__(self, job_id: str, params: dict):
+                """
+                Initialize SimpleJob.
+
+                Args:
+                    job_id: Unique job identifier.
+                    params: Job parameters.
+                """
                 super().__init__(job_id, params)
 
             def execute(self) -> None:
+                """
+                Execute the job.
+                """
                 print(f"SimpleJob {self.job_id} executed")
 
             def on_start(self) -> None:
+                """
+                Called when job starts.
+                """
                 print(f"SimpleJob {self.job_id} started")
 
             def on_stop(self) -> None:
+                """
+                Called when job stops.
+                """
                 print(f"SimpleJob {self.job_id} stopped")
 
             def on_end(self) -> None:
+                """
+                Called when job ends.
+                """
                 print(f"SimpleJob {self.job_id} ended")
 
             def on_error(self, exc: BaseException) -> None:
+                """
+                Called when job encounters an error.
+
+                Args:
+                    exc: The exception that occurred.
+                """
                 print(f"SimpleJob {self.job_id} error: {exc}")
 
         return SimpleJob

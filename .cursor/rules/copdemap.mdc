@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+After each operation of r/w run code_mapper.py script and fix searched errors

@@ -14,10 +14,13 @@ import signal
 import time
 import logging
 import argparse
+import tempfile
 from pathlib import Path
 from typing import Optional
 
-from ..proc_manager import ProcManager, ProcManagerConfig
+from queuemgr.proc_manager import ProcManager
+from queuemgr.proc_config import ProcManagerConfig
+from queuemgr.exceptions import ProcessControlError
 
 
 class QueueManagerDaemon:
@@ -41,15 +44,13 @@ class QueueManagerDaemon:
         self.logger = self._setup_logging()
         self.running = False
 
-    def _load_config(self) -> ProcManagerConfig:
+    def _load_config(self) -> dict:
         """Load configuration from file or use defaults."""
         if self.config_path and Path(self.config_path).exists():
             # TODO: Implement config file loading
             pass
 
         # Use temp directories for testing
-        import tempfile
-
         temp_dir = Path(tempfile.gettempdir()) / "queuemgr_test"
 
         return ProcManagerConfig(
@@ -66,8 +67,6 @@ class QueueManagerDaemon:
         logger.setLevel(logging.INFO)
 
         # Create logs directory
-        import tempfile
-
         log_dir = Path(tempfile.gettempdir()) / "queuemgr_test" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -116,7 +115,7 @@ class QueueManagerDaemon:
             # Main daemon loop
             self._daemon_loop()
 
-        except Exception as e:
+        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             self.logger.error(f"Failed to start daemon: {e}")
             raise
 
@@ -136,7 +135,7 @@ class QueueManagerDaemon:
             self.running = False
             self.logger.info("Queue Manager Daemon stopped successfully")
 
-        except Exception as e:
+        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             self.logger.error(f"Error stopping daemon: {e}")
             raise
 
@@ -183,6 +182,13 @@ class QueueManagerDaemon:
         """Setup signal handlers for graceful shutdown."""
 
         def signal_handler(signum, frame):
+            """
+            Handle OS signals for graceful shutdown.
+
+            Args:
+                signum: Signal number.
+                frame: Current stack frame.
+            """
             self.logger.info(f"Received signal {signum}, shutting down gracefully...")
             self.stop()
             sys.exit(0)
@@ -202,7 +208,13 @@ class QueueManagerDaemon:
                     self.logger.error("Manager process died, attempting restart...")
                     try:
                         self.manager.start()
-                    except Exception as e:
+                    except (
+                        OSError,
+                        IOError,
+                        ValueError,
+                        TimeoutError,
+                        ProcessControlError,
+                    ) as e:
                         self.logger.error(f"Failed to restart manager: {e}")
                         break
 
@@ -211,7 +223,7 @@ class QueueManagerDaemon:
 
         except KeyboardInterrupt:
             self.logger.info("Received keyboard interrupt, shutting down...")
-        except Exception as e:
+        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             self.logger.error(f"Daemon loop error: {e}")
         finally:
             self.stop()
