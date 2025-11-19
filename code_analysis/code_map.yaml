@@ -77,7 +77,7 @@ classes:
 
       manager and handles cleanup, designed to work with asyncio applications.'
     file: queuemgr/async_simple_api.py
-    line: 23
+    line: 21
     methods:
     - __init__
     - is_running
@@ -957,7 +957,7 @@ classes:
     bases: []
     docstring: Configuration for ProcessManager.
     file: queuemgr/process_config.py
-    line: 14
+    line: 15
     methods: []
     name: ProcessManagerConfig
   queuemgr/process_context.py:ProcessManagerContext:
@@ -1031,7 +1031,7 @@ classes:
 
       status lookup, and job operations (add, delete, start, stop, suspend).'
     file: queuemgr/queue/job_queue.py
-    line: 25
+    line: 28
     methods:
     - __init__
     - get_jobs
@@ -1048,6 +1048,8 @@ classes:
     - list_job_statuses
     - cleanup_completed_jobs
     - shutdown
+    - _get_jobs_by_type
+    - _find_oldest_job_id
     name: JobQueue
   queuemgr/simple_api.py:QueueSystem:
     bases: []
@@ -1355,6 +1357,57 @@ classes:
     - test_shutdown
     - test_shutdown_with_terminate
     name: TestJobQueueOperations
+  tests/queue/test_job_queue_per_type_limits.py:AnotherTestJob:
+    bases:
+    - QueueJobBase
+    docstring: Another test job class.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 66
+    methods:
+    - execute
+    name: AnotherTestJob
+  tests/queue/test_job_queue_per_type_limits.py:InMemoryRegistry:
+    bases:
+    - Registry
+    docstring: 'In-memory Registry implementation for tests.
+
+
+      Avoids filesystem I/O while satisfying Registry interface contracts.'
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 16
+    methods:
+    - __init__
+    - append
+    - latest
+    - all_latest
+    name: InMemoryRegistry
+  tests/queue/test_job_queue_per_type_limits.py:TestJob:
+    bases:
+    - QueueJobBase
+    docstring: Test job class.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 58
+    methods:
+    - execute
+    name: TestJob
+  tests/queue/test_job_queue_per_type_limits.py:TestJobQueuePerTypeLimits:
+    bases: []
+    docstring: Test per-job-type limits functionality.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 74
+    methods:
+    - test_add_job_without_limits
+    - test_add_job_with_per_type_limit_not_reached
+    - test_add_job_with_per_type_limit_reached
+    - test_add_job_with_multiple_types_different_limits
+    - test_add_job_with_global_limit
+    - test_add_job_per_type_limit_takes_precedence
+    - test_get_jobs_by_type
+    - test_find_oldest_job_id
+    - test_eviction_removes_from_registry
+    - test_limit_of_one
+    - test_job_type_not_in_limits
+    name: TestJobQueuePerTypeLimits
   tests/test_exceptions.py:TestExceptionHierarchy:
     bases: []
     docstring: Test exception hierarchy.
@@ -1696,7 +1749,7 @@ functions:
       \ Queue for receiving commands.\n    response_queue: Queue for sending responses.\n\
       \    shutdown_event: Event for shutdown signaling.\n    config: Manager configuration."
     file: queuemgr/async_process_manager.py
-    line: 342
+    line: 344
     name: _manager_process
   queuemgr/async_process_manager.py:get_response:
     args: []
@@ -1715,7 +1768,7 @@ functions:
     args: []
     docstring: null
     file: queuemgr/async_process_manager.py
-    line: 295
+    line: 297
     name: send_command
   queuemgr/async_process_manager.py:signal_handler:
     args:
@@ -1724,23 +1777,27 @@ functions:
     docstring: "Handle OS signals for graceful shutdown.\n\nArgs:\n    signum: Signal\
       \ number.\n    frame: Current stack frame."
     file: queuemgr/async_process_manager.py
-    line: 359
+    line: 361
     name: signal_handler
   queuemgr/async_simple_api.py:__init__:
     args:
     - self
     - registry_path
     - shutdown_timeout
+    - max_queue_size
+    - per_job_type_limits
     docstring: "Initialize the async queue system.\n\nArgs:\n    registry_path: Path\
-      \ to the registry file.\n    shutdown_timeout: Timeout for graceful shutdown."
+      \ to the registry file.\n    shutdown_timeout: Timeout for graceful shutdown.\n\
+      \    max_queue_size: Global maximum number of jobs (optional).\n    per_job_type_limits:\
+      \ Dict mapping job_type to max count (optional)."
     file: queuemgr/async_simple_api.py
-    line: 31
+    line: 29
     name: __init__
   queuemgr/async_simple_api.py:_setup_async_cleanup:
     args: []
     docstring: Setup async cleanup handlers.
     file: queuemgr/async_simple_api.py
-    line: 288
+    line: 304
     name: _setup_async_cleanup
   queuemgr/async_simple_api.py:is_running:
     args:
@@ -1748,7 +1805,7 @@ functions:
     docstring: "Check if the queue system is running.\n\nReturns:\n    True if the\
       \ system is running, False otherwise."
     file: queuemgr/async_simple_api.py
-    line: 89
+    line: 96
     name: is_running
   queuemgr/async_simple_queue.py:__init__:
     args:
@@ -3768,7 +3825,7 @@ functions:
     - params
     docstring: Process a command from the manager.
     file: queuemgr/proc_manager_core.py
-    line: 359
+    line: 363
     name: _process_command
   queuemgr/proc_manager_core.py:_send_command:
     args:
@@ -4047,20 +4104,43 @@ functions:
     args:
     - self
     - registry
+    - max_queue_size
+    - per_job_type_limits
     docstring: "Initialize the job queue.\n\nArgs:\n    registry: Registry instance\
-      \ for persisting job states."
+      \ for persisting job states.\n    max_queue_size: Global maximum number of jobs\
+      \ (optional).\n    per_job_type_limits: Dict mapping job_type to max count (optional)."
     file: queuemgr/queue/job_queue.py
-    line: 31
+    line: 34
     name: __init__
+  queuemgr/queue/job_queue.py:_find_oldest_job_id:
+    args:
+    - self
+    - job_ids
+    docstring: "Find the oldest job ID by creation time.\n\nArgs:\n    job_ids: List\
+      \ of job IDs to search.\n\nReturns:\n    Oldest job ID, or None if list is empty."
+    file: queuemgr/queue/job_queue.py
+    line: 441
+    name: _find_oldest_job_id
+  queuemgr/queue/job_queue.py:_get_jobs_by_type:
+    args:
+    - self
+    - job_type
+    docstring: "Get all job IDs of a specific type.\n\nArgs:\n    job_type: Job type\
+      \ to filter by.\n\nReturns:\n    List of job IDs of the specified type."
+    file: queuemgr/queue/job_queue.py
+    line: 427
+    name: _get_jobs_by_type
   queuemgr/queue/job_queue.py:add_job:
     args:
     - self
     - job
-    docstring: "Add a new job; returns its job_id. Initial state is PENDING.\n\nArgs:\n\
-      \    job: Job instance to add.\n\nReturns:\n    Job ID of the added job.\n\n\
-      Raises:\n    JobAlreadyExistsError: If job with same ID already exists."
+    docstring: "Add a new job; returns its job_id. Initial state is PENDING.\n\nIf\
+      \ per-job-type limits are configured and limit is reached,\nthe oldest job of\
+      \ this type will be removed first (FIFO eviction).\n\nArgs:\n    job: Job instance\
+      \ to add.\n\nReturns:\n    Job ID of the added job.\n\nRaises:\n    JobAlreadyExistsError:\
+      \ If job with same ID already exists."
     file: queuemgr/queue/job_queue.py
-    line: 116
+    line: 129
     name: add_job
   queuemgr/queue/job_queue.py:cleanup_completed_jobs:
     args:
@@ -4068,7 +4148,7 @@ functions:
     docstring: "Remove completed and error jobs from the queue.\n\nReturns:\n    Number\
       \ of jobs removed."
     file: queuemgr/queue/job_queue.py
-    line: 323
+    line: 374
     name: cleanup_completed_jobs
   queuemgr/queue/job_queue.py:delete_job:
     args:
@@ -4080,7 +4160,7 @@ functions:
       \ terminate running job.\n\nRaises:\n    JobNotFoundError: If job is not found.\n\
       \    ProcessControlError: If process control fails."
     file: queuemgr/queue/job_queue.py
-    line: 155
+    line: 204
     name: delete_job
   queuemgr/queue/job_queue.py:get_job_by_id:
     args:
@@ -4089,7 +4169,7 @@ functions:
     docstring: "Get a job by its ID.\n\nArgs:\n    job_id: Job identifier to look\
       \ up.\n\nReturns:\n    Job instance if found, None otherwise."
     file: queuemgr/queue/job_queue.py
-    line: 298
+    line: 349
     name: get_job_by_id
   queuemgr/queue/job_queue.py:get_job_count:
     args:
@@ -4097,7 +4177,7 @@ functions:
     docstring: "Get the total number of jobs in the queue.\n\nReturns:\n    Number\
       \ of jobs in the queue."
     file: queuemgr/queue/job_queue.py
-    line: 276
+    line: 327
     name: get_job_count
   queuemgr/queue/job_queue.py:get_job_status:
     args:
@@ -4107,7 +4187,7 @@ functions:
       \nArgs:\n    job_id: Job identifier to look up.\n\nReturns:\n    JobRecord containing\
       \ current job state.\n\nRaises:\n    JobNotFoundError: If job is not found."
     file: queuemgr/queue/job_queue.py
-    line: 87
+    line: 100
     name: get_job_status
   queuemgr/queue/job_queue.py:get_jobs:
     args:
@@ -4115,7 +4195,7 @@ functions:
     docstring: "Return a read-only mapping of job_id -> job instance.\n\nReturns:\n\
       \    Read-only mapping of job IDs to job instances."
     file: queuemgr/queue/job_queue.py
-    line: 43
+    line: 56
     name: get_jobs
   queuemgr/queue/job_queue.py:get_running_jobs:
     args:
@@ -4123,7 +4203,7 @@ functions:
     docstring: "Get all currently running jobs.\n\nReturns:\n    Dictionary of running\
       \ job IDs to job instances."
     file: queuemgr/queue/job_queue.py
-    line: 285
+    line: 336
     name: get_running_jobs
   queuemgr/queue/job_queue.py:list_job_statuses:
     args:
@@ -4131,7 +4211,7 @@ functions:
     docstring: "Get the status of all jobs.\n\nReturns:\n    Dictionary mapping job\
       \ IDs to their current status."
     file: queuemgr/queue/job_queue.py
-    line: 310
+    line: 361
     name: list_job_statuses
   queuemgr/queue/job_queue.py:list_jobs:
     args:
@@ -4140,7 +4220,7 @@ functions:
       \    List of dictionaries describing each job (job_id, status, progress,\n \
       \   metadata) that can be safely serialized to JSON for IPC responses."
     file: queuemgr/queue/job_queue.py
-    line: 52
+    line: 65
     name: list_jobs
   queuemgr/queue/job_queue.py:shutdown:
     args:
@@ -4150,7 +4230,7 @@ functions:
       \ Maximum time to wait for jobs to stop gracefully.\n\nRaises:\n    ProcessControlError:\
       \ If some jobs fail to stop."
     file: queuemgr/queue/job_queue.py
-    line: 344
+    line: 397
     name: shutdown
   queuemgr/queue/job_queue.py:start_job:
     args:
@@ -4161,7 +4241,7 @@ functions:
       \    InvalidJobStateError: If job is not in a startable state.\n    ProcessControlError:\
       \ If process creation fails."
     file: queuemgr/queue/job_queue.py
-    line: 203
+    line: 254
     name: start_job
   queuemgr/queue/job_queue.py:stop_job:
     args:
@@ -4173,7 +4253,7 @@ functions:
       \ (seconds).\n\nRaises:\n    JobNotFoundError: If job is not found.\n    ProcessControlError:\
       \ If stop fails."
     file: queuemgr/queue/job_queue.py
-    line: 237
+    line: 288
     name: stop_job
   queuemgr/queue/job_queue.py:suspend_job:
     args:
@@ -4183,7 +4263,7 @@ functions:
       \ to stopping the job.\n\nArgs:\n    job_id: Job identifier to suspend.\n\n\
       Raises:\n    JobNotFoundError: If job is not found."
     file: queuemgr/queue/job_queue.py
-    line: 262
+    line: 313
     name: suspend_job
   queuemgr/simple_api.py:__init__:
     args:
@@ -5140,6 +5220,123 @@ functions:
     file: tests/queue/test_job_queue_operations.py
     line: 169
     name: test_suspend_job
+  tests/queue/test_job_queue_per_type_limits.py:__init__:
+    args:
+    - self
+    docstring: Initialize empty registry storage.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 23
+    name: __init__
+  tests/queue/test_job_queue_per_type_limits.py:all_latest:
+    args:
+    - self
+    docstring: "Return all latest records.\n\nReturns:\n    Iterable of all stored\
+      \ records."
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 48
+    name: all_latest
+  tests/queue/test_job_queue_per_type_limits.py:append:
+    args:
+    - self
+    - record
+    docstring: "Store the latest record for a job.\n\nArgs:\n    record: Snapshot\
+      \ to persist."
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 27
+    name: append
+  tests/queue/test_job_queue_per_type_limits.py:execute:
+    args:
+    - self
+    docstring: Execute another test job.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 69
+    name: execute
+  tests/queue/test_job_queue_per_type_limits.py:latest:
+    args:
+    - self
+    - job_id
+    docstring: "Return the latest record for a job, if stored.\n\nArgs:\n    job_id:\
+      \ Identifier to look up.\n\nReturns:\n    Latest record or None when missing."
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 36
+    name: latest
+  tests/queue/test_job_queue_per_type_limits.py:test_add_job_per_type_limit_takes_precedence:
+    args:
+    - self
+    docstring: Test that per-type limit is checked before global limit.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 207
+    name: test_add_job_per_type_limit_takes_precedence
+  tests/queue/test_job_queue_per_type_limits.py:test_add_job_with_global_limit:
+    args:
+    - self
+    docstring: Test adding jobs with global queue size limit.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 183
+    name: test_add_job_with_global_limit
+  tests/queue/test_job_queue_per_type_limits.py:test_add_job_with_multiple_types_different_limits:
+    args:
+    - self
+    docstring: Test adding jobs with different limits for different types.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 139
+    name: test_add_job_with_multiple_types_different_limits
+  tests/queue/test_job_queue_per_type_limits.py:test_add_job_with_per_type_limit_not_reached:
+    args:
+    - self
+    docstring: Test adding jobs when per-type limit is not reached.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 95
+    name: test_add_job_with_per_type_limit_not_reached
+  tests/queue/test_job_queue_per_type_limits.py:test_add_job_with_per_type_limit_reached:
+    args:
+    - self
+    docstring: Test adding jobs when per-type limit is reached (FIFO eviction).
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 114
+    name: test_add_job_with_per_type_limit_reached
+  tests/queue/test_job_queue_per_type_limits.py:test_add_job_without_limits:
+    args:
+    - self
+    docstring: Test adding jobs when no limits are configured.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 77
+    name: test_add_job_without_limits
+  tests/queue/test_job_queue_per_type_limits.py:test_eviction_removes_from_registry:
+    args:
+    - self
+    docstring: Test that evicted jobs are removed from registry.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 270
+    name: test_eviction_removes_from_registry
+  tests/queue/test_job_queue_per_type_limits.py:test_find_oldest_job_id:
+    args:
+    - self
+    docstring: Test helper method for finding oldest job.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 249
+    name: test_find_oldest_job_id
+  tests/queue/test_job_queue_per_type_limits.py:test_get_jobs_by_type:
+    args:
+    - self
+    docstring: Test helper method for getting jobs by type.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 228
+    name: test_get_jobs_by_type
+  tests/queue/test_job_queue_per_type_limits.py:test_job_type_not_in_limits:
+    args:
+    - self
+    docstring: Test that jobs with types not in limits are not limited.
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 308
+    name: test_job_type_not_in_limits
+  tests/queue/test_job_queue_per_type_limits.py:test_limit_of_one:
+    args:
+    - self
+    docstring: Test limit of 1 (only one job of type allowed).
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 292
+    name: test_limit_of_one
   tests/test_exceptions.py:test_base_error_creation:
     args:
     - self
@@ -5635,67 +5832,61 @@ imports:
     type: import
   queuemgr/async_simple_api.py:Any:
     file: queuemgr/async_simple_api.py
-    line: 15
+    line: 13
     module: typing
     name: Any
     type: import_from
   queuemgr/async_simple_api.py:AsyncProcessManager:
     file: queuemgr/async_simple_api.py
-    line: 18
+    line: 16
     module: async_process_manager
     name: AsyncProcessManager
     type: import_from
   queuemgr/async_simple_api.py:Dict:
     file: queuemgr/async_simple_api.py
-    line: 15
+    line: 13
     module: typing
     name: Dict
     type: import_from
   queuemgr/async_simple_api.py:List:
     file: queuemgr/async_simple_api.py
-    line: 15
+    line: 13
     module: typing
     name: List
     type: import_from
   queuemgr/async_simple_api.py:Optional:
     file: queuemgr/async_simple_api.py
-    line: 15
+    line: 13
     module: typing
     name: Optional
     type: import_from
   queuemgr/async_simple_api.py:ProcessControlError:
     file: queuemgr/async_simple_api.py
-    line: 20
+    line: 18
     module: queuemgr.exceptions
     name: ProcessControlError
     type: import_from
   queuemgr/async_simple_api.py:ProcessManagerConfig:
     file: queuemgr/async_simple_api.py
-    line: 61
+    line: 65
     module: process_config
     name: ProcessManagerConfig
     type: import_from
   queuemgr/async_simple_api.py:QueueJobBase:
     file: queuemgr/async_simple_api.py
-    line: 19
+    line: 17
     module: jobs.base
     name: QueueJobBase
     type: import_from
   queuemgr/async_simple_api.py:Type:
     file: queuemgr/async_simple_api.py
-    line: 15
+    line: 13
     module: typing
     name: Type
     type: import_from
-  queuemgr/async_simple_api.py:async_queue_system:
-    file: queuemgr/async_simple_api.py
-    line: 18
-    module: async_process_manager
-    name: async_queue_system
-    type: import_from
   queuemgr/async_simple_api.py:asynccontextmanager:
     file: queuemgr/async_simple_api.py
-    line: 16
+    line: 14
     module: contextlib
     name: asynccontextmanager
     type: import_from
@@ -5704,20 +5895,10 @@ imports:
     line: 11
     name: asyncio
     type: import
-  queuemgr/async_simple_api.py:atexit:
-    file: queuemgr/async_simple_api.py
-    line: 12
-    name: atexit
-    type: import
   queuemgr/async_simple_api.py:signal:
     file: queuemgr/async_simple_api.py
-    line: 13
+    line: 12
     name: signal
-    type: import
-  queuemgr/async_simple_api.py:sys:
-    file: queuemgr/async_simple_api.py
-    line: 14
-    name: sys
     type: import
   queuemgr/async_simple_queue.py:Any:
     file: queuemgr/async_simple_queue.py
@@ -7716,6 +7897,18 @@ imports:
     module: queue.job_queue
     name: JobQueue
     type: import_from
+  queuemgr/process_config.py:Dict:
+    file: queuemgr/process_config.py
+    line: 11
+    module: typing
+    name: Dict
+    type: import_from
+  queuemgr/process_config.py:Optional:
+    file: queuemgr/process_config.py
+    line: 11
+    module: typing
+    name: Optional
+    type: import_from
   queuemgr/process_config.py:dataclass:
     file: queuemgr/process_config.py
     line: 10
@@ -7853,91 +8046,91 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:Any:
     file: queuemgr/queue/job_queue.py
-    line: 11
+    line: 12
     module: typing
     name: Any
     type: import_from
   queuemgr/queue/job_queue.py:Dict:
     file: queuemgr/queue/job_queue.py
-    line: 11
+    line: 12
     module: typing
     name: Dict
     type: import_from
   queuemgr/queue/job_queue.py:InvalidJobStateError:
     file: queuemgr/queue/job_queue.py
-    line: 17
+    line: 18
     module: exceptions
     name: InvalidJobStateError
     type: import_from
   queuemgr/queue/job_queue.py:JobAlreadyExistsError:
     file: queuemgr/queue/job_queue.py
-    line: 17
+    line: 18
     module: exceptions
     name: JobAlreadyExistsError
     type: import_from
   queuemgr/queue/job_queue.py:JobCommand:
     file: queuemgr/queue/job_queue.py
-    line: 13
+    line: 14
     module: queuemgr.core.types
     name: JobCommand
     type: import_from
   queuemgr/queue/job_queue.py:JobId:
     file: queuemgr/queue/job_queue.py
-    line: 13
+    line: 14
     module: queuemgr.core.types
     name: JobId
     type: import_from
   queuemgr/queue/job_queue.py:JobNotFoundError:
     file: queuemgr/queue/job_queue.py
-    line: 17
+    line: 18
     module: exceptions
     name: JobNotFoundError
     type: import_from
   queuemgr/queue/job_queue.py:JobRecord:
     file: queuemgr/queue/job_queue.py
-    line: 13
+    line: 14
     module: queuemgr.core.types
     name: JobRecord
     type: import_from
   queuemgr/queue/job_queue.py:JobStatus:
     file: queuemgr/queue/job_queue.py
-    line: 13
+    line: 14
     module: queuemgr.core.types
     name: JobStatus
     type: import_from
   queuemgr/queue/job_queue.py:List:
     file: queuemgr/queue/job_queue.py
-    line: 11
+    line: 12
     module: typing
     name: List
     type: import_from
   queuemgr/queue/job_queue.py:Mapping:
     file: queuemgr/queue/job_queue.py
-    line: 11
+    line: 12
     module: typing
     name: Mapping
     type: import_from
   queuemgr/queue/job_queue.py:Optional:
     file: queuemgr/queue/job_queue.py
-    line: 11
+    line: 12
     module: typing
     name: Optional
     type: import_from
   queuemgr/queue/job_queue.py:ProcessControlError:
     file: queuemgr/queue/job_queue.py
-    line: 22
+    line: 23
     module: core.exceptions
     name: ProcessControlError
     type: import_from
   queuemgr/queue/job_queue.py:QueueJobBase:
     file: queuemgr/queue/job_queue.py
-    line: 14
+    line: 15
     module: queuemgr.jobs.base
     name: QueueJobBase
     type: import_from
   queuemgr/queue/job_queue.py:Registry:
     file: queuemgr/queue/job_queue.py
-    line: 15
+    line: 16
     module: queuemgr.core.registry
     name: Registry
     type: import_from
@@ -7949,25 +8142,30 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:create_job_shared_state:
     file: queuemgr/queue/job_queue.py
-    line: 16
+    line: 17
     module: queuemgr.core.ipc
     name: create_job_shared_state
     type: import_from
   queuemgr/queue/job_queue.py:datetime:
     file: queuemgr/queue/job_queue.py
-    line: 10
+    line: 11
     module: datetime
     name: datetime
     type: import_from
   queuemgr/queue/job_queue.py:get_manager:
     file: queuemgr/queue/job_queue.py
-    line: 16
+    line: 17
     module: queuemgr.core.ipc
     name: get_manager
     type: import_from
+  queuemgr/queue/job_queue.py:logging:
+    file: queuemgr/queue/job_queue.py
+    line: 10
+    name: logging
+    type: import
   queuemgr/queue/job_queue.py:set_command:
     file: queuemgr/queue/job_queue.py
-    line: 16
+    line: 17
     module: queuemgr.core.ipc
     name: set_command
     type: import_from
@@ -8510,6 +8708,59 @@ imports:
     file: tests/queue/test_job_queue_operations.py
     line: 8
     name: pytest
+    type: import
+  tests/queue/test_job_queue_per_type_limits.py:Dict:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 8
+    module: typing
+    name: Dict
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:Iterable:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 8
+    module: typing
+    name: Iterable
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:JobId:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 12
+    module: queuemgr.core.types
+    name: JobId
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:JobQueue:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 10
+    module: queuemgr.queue.job_queue
+    name: JobQueue
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:JobRecord:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 12
+    module: queuemgr.core.types
+    name: JobRecord
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:Optional:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 8
+    module: typing
+    name: Optional
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:QueueJobBase:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 13
+    module: queuemgr.jobs.base
+    name: QueueJobBase
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:Registry:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 11
+    module: queuemgr.core.registry
+    name: Registry
+    type: import_from
+  tests/queue/test_job_queue_per_type_limits.py:time:
+    file: tests/queue/test_job_queue_per_type_limits.py
+    line: 259
+    name: time
     type: import
   tests/test_exceptions.py:InvalidJobStateError:
     file: tests/test_exceptions.py

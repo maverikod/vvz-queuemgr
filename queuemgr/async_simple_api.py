@@ -9,13 +9,11 @@ email: vasilyvz@gmail.com
 """
 
 import asyncio
-import atexit
 import signal
-import sys
 from typing import Dict, Any, Optional, Type, List
 from contextlib import asynccontextmanager
 
-from .async_process_manager import AsyncProcessManager, async_queue_system
+from .async_process_manager import AsyncProcessManager
 from .jobs.base import QueueJobBase
 from queuemgr.exceptions import ProcessControlError
 
@@ -32,6 +30,8 @@ class AsyncQueueSystem:
         self,
         registry_path: str = "queuemgr_registry.jsonl",
         shutdown_timeout: float = 30.0,
+        max_queue_size: Optional[int] = None,
+        per_job_type_limits: Optional[Dict[str, int]] = None,
     ):
         """
         Initialize the async queue system.
@@ -39,9 +39,13 @@ class AsyncQueueSystem:
         Args:
             registry_path: Path to the registry file.
             shutdown_timeout: Timeout for graceful shutdown.
+            max_queue_size: Global maximum number of jobs (optional).
+            per_job_type_limits: Dict mapping job_type to max count (optional).
         """
         self.registry_path = registry_path
         self.shutdown_timeout = shutdown_timeout
+        self.max_queue_size = max_queue_size
+        self.per_job_type_limits = per_job_type_limits
         self._manager: Optional[AsyncProcessManager] = None
         self._is_initialized = False
 
@@ -61,7 +65,10 @@ class AsyncQueueSystem:
             from .process_config import ProcessManagerConfig
 
             config = ProcessManagerConfig(
-                registry_path=self.registry_path, shutdown_timeout=self.shutdown_timeout
+                registry_path=self.registry_path,
+                shutdown_timeout=self.shutdown_timeout,
+                max_queue_size=self.max_queue_size,
+                per_job_type_limits=self.per_job_type_limits,
             )
             self._manager = AsyncProcessManager(config)
             await self._manager.start()
@@ -93,11 +100,11 @@ class AsyncQueueSystem:
         Returns:
             True if the system is running, False otherwise.
         """
-        return (
-            self._is_initialized
-            and self._manager is not None
-            and self._manager.is_running()
-        )
+        if not self._is_initialized:
+            return False
+        if self._manager is None:
+            return False
+        return self._manager.is_running()
 
     async def add_job(
         self, job_class: Type[QueueJobBase], job_id: str, params: Dict[str, Any]
@@ -214,6 +221,8 @@ class AsyncQueueSystem:
 async def async_queue_system_context(
     registry_path: str = "queuemgr_registry.jsonl",
     shutdown_timeout: float = 30.0,
+    max_queue_size: Optional[int] = None,
+    per_job_type_limits: Optional[Dict[str, int]] = None,
 ):
     """
     AsyncIO-compatible context manager for the queue system.
@@ -221,6 +230,8 @@ async def async_queue_system_context(
     Args:
         registry_path: Path to the registry file.
         shutdown_timeout: Timeout for graceful shutdown.
+        max_queue_size: Global maximum number of jobs (optional).
+        per_job_type_limits: Dict mapping job_type to max count (optional).
 
     Yields:
         AsyncQueueSystem: The async queue system instance.
@@ -233,7 +244,12 @@ async def async_queue_system_context(
             status = await queue.get_job_status("job1")
         ```
     """
-    queue_system = AsyncQueueSystem(registry_path, shutdown_timeout)
+    queue_system = AsyncQueueSystem(
+        registry_path,
+        shutdown_timeout,
+        max_queue_size=max_queue_size,
+        per_job_type_limits=per_job_type_limits,
+    )
 
     try:
         await queue_system.start()

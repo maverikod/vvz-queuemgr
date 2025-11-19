@@ -1,3 +1,5 @@
+AnotherTestJob:
+- execute
 ApiCallJob:
 - __init__
 - execute
@@ -119,6 +121,10 @@ InMemoryRegistry:
 - append
 - latest
 - all_latest
+- __init__
+- append
+- latest
+- all_latest
 InvalidJobStateError:
 - __init__
 - __init__
@@ -155,6 +161,8 @@ JobQueue:
 - list_job_statuses
 - cleanup_completed_jobs
 - shutdown
+- _get_jobs_by_type
+- _find_oldest_job_id
 JobRecord:
 - __post_init__
 JobRequest: []
@@ -429,6 +437,7 @@ TestInvalidJobStateError:
 TestJob:
 - __init__
 - execute
+- execute
 - __init__
 - execute
 - __init__
@@ -486,6 +495,18 @@ TestJobQueueOperations:
 - test_cleanup_completed_jobs
 - test_shutdown
 - test_shutdown_with_terminate
+TestJobQueuePerTypeLimits:
+- test_add_job_without_limits
+- test_add_job_with_per_type_limit_not_reached
+- test_add_job_with_per_type_limit_reached
+- test_add_job_with_multiple_types_different_limits
+- test_add_job_with_global_limit
+- test_add_job_per_type_limit_takes_precedence
+- test_get_jobs_by_type
+- test_find_oldest_job_id
+- test_eviction_removes_from_registry
+- test_limit_of_one
+- test_job_type_not_in_limits
 TestJobRecord:
 - test_job_record_creation
 - test_job_record_immutable

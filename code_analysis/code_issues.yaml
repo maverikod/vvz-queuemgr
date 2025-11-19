@@ -17,14 +17,18 @@ issues:
     file: queuemgr/examples/async_fastapi_example.py
     line: 44
   files_too_large:
-  - exceeds_limit: 3
+  - exceeds_limit: 7
     file: queuemgr/proc_manager_core.py
     limit: 400
-    lines: 403
-  - exceeds_limit: 67
+    lines: 407
+  - exceeds_limit: 73
     file: queuemgr/async_process_manager.py
     limit: 400
-    lines: 467
+    lines: 473
+  - exceeds_limit: 58
+    file: queuemgr/queue/job_queue.py
+    limit: 400
+    lines: 458
   - exceeds_limit: 121
     file: queuemgr/examples/mcp_adapter_example.py
     limit: 400
@@ -40,7 +44,7 @@ issues:
     method: get_response
   - class: null
     file: queuemgr/async_process_manager.py
-    line: 295
+    line: 297
     method: send_command
   - class: MCPJob
     file: queuemgr/examples/working_mcp_server.py
@@ -126,7 +130,7 @@ issues:
 summary:
   any_type_usage: 0
   classes_without_docstrings: 5
-  files_too_large: 3
+  files_too_large: 4
   files_without_docstrings: 0
   generic_exception_usage: 0
   imports_in_middle: 0
@@ -134,4 +138,4 @@ summary:
   methods_with_pass: 0
   methods_without_docstrings: 22
   not_implemented_in_non_abstract: 0
-  total_issues: 30
+  total_issues: 31

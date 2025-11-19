@@ -7,6 +7,7 @@ email: vasilyvz@gmail.com
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -21,6 +22,8 @@ from .exceptions import (
 )
 from ..core.exceptions import ProcessControlError
 
+logger = logging.getLogger("queuemgr.queue.job_queue")
+
 
 class JobQueue:
     """
@@ -28,17 +31,27 @@ class JobQueue:
     status lookup, and job operations (add, delete, start, stop, suspend).
     """
 
-    def __init__(self, registry: Registry) -> None:
+    def __init__(
+        self,
+        registry: Registry,
+        max_queue_size: Optional[int] = None,
+        per_job_type_limits: Optional[Dict[str, int]] = None,
+    ) -> None:
         """
         Initialize the job queue.
 
         Args:
             registry: Registry instance for persisting job states.
+            max_queue_size: Global maximum number of jobs (optional).
+            per_job_type_limits: Dict mapping job_type to max count (optional).
         """
         self.registry = registry
         self._jobs: Dict[JobId, QueueJobBase] = {}
         self._manager = get_manager()
         self._job_creation_times: Dict[JobId, datetime] = {}
+        self._job_types: Dict[JobId, str] = {}
+        self.max_queue_size = max_queue_size
+        self.per_job_type_limits = per_job_type_limits or {}
 
     def get_jobs(self) -> Mapping[JobId, QueueJobBase]:
         """
@@ -117,6 +130,9 @@ class JobQueue:
         """
         Add a new job; returns its job_id. Initial state is PENDING.
 
+        If per-job-type limits are configured and limit is reached,
+        the oldest job of this type will be removed first (FIFO eviction).
+
         Args:
             job: Job instance to add.
 
@@ -129,6 +145,38 @@ class JobQueue:
         if job.job_id in self._jobs:
             raise JobAlreadyExistsError(job.job_id)
 
+        # Determine job type from class name
+        job_type = job.__class__.__name__
+
+        # Check per-job-type limit and evict if necessary
+        if self.per_job_type_limits and job_type in self.per_job_type_limits:
+            limit = self.per_job_type_limits[job_type]
+            existing_jobs = self._get_jobs_by_type(job_type)
+
+            if len(existing_jobs) >= limit:
+                # Find and remove oldest job of this type
+                oldest_job_id = self._find_oldest_job_id(existing_jobs)
+                if oldest_job_id:
+                    logger.info(
+                        f"Evicting oldest {job_type} job {oldest_job_id} "
+                        f"(limit: {limit}, adding: {job.job_id})"
+                    )
+                    self.delete_job(oldest_job_id, force=True)
+
+        # Check global queue size limit if configured
+        if self.max_queue_size and len(self._jobs) >= self.max_queue_size:
+            # Find oldest job overall
+            if self._jobs:
+                oldest_job_id = min(
+                    self._jobs.keys(),
+                    key=lambda jid: self._job_creation_times.get(jid, datetime.now()),
+                )
+                logger.info(
+                    f"Evicting oldest job {oldest_job_id} "
+                    f"(global limit: {self.max_queue_size}, adding: {job.job_id})"
+                )
+                self.delete_job(oldest_job_id, force=True)
+
         # Set up shared state for the job
         shared_state = create_job_shared_state(self._manager)
         job._set_shared_state(shared_state)
@@ -137,6 +185,7 @@ class JobQueue:
         # Add to jobs dictionary
         self._jobs[job.job_id] = job
         self._job_creation_times[job.job_id] = datetime.now()
+        self._job_types[job.job_id] = job_type
 
         # Write initial state to registry
         initial_record = JobRecord(
@@ -187,6 +236,8 @@ class JobQueue:
         # Remove from jobs dictionary
         del self._jobs[job_id]
         del self._job_creation_times[job_id]
+        if job_id in self._job_types:
+            del self._job_types[job_id]
 
         # Write deletion record to registry
         deletion_record = JobRecord(
@@ -338,6 +389,8 @@ class JobQueue:
             del self._jobs[job_id]
             if job_id in self._job_creation_times:
                 del self._job_creation_times[job_id]
+            if job_id in self._job_types:
+                del self._job_types[job_id]
 
         return len(jobs_to_remove)
 
@@ -369,3 +422,36 @@ class JobQueue:
         # Clear all jobs
         self._jobs.clear()
         self._job_creation_times.clear()
+        self._job_types.clear()
+
+    def _get_jobs_by_type(self, job_type: str) -> List[JobId]:
+        """
+        Get all job IDs of a specific type.
+
+        Args:
+            job_type: Job type to filter by.
+
+        Returns:
+            List of job IDs of the specified type.
+        """
+        return [
+            job_id for job_id, jtype in self._job_types.items() if jtype == job_type
+        ]
+
+    def _find_oldest_job_id(self, job_ids: List[JobId]) -> Optional[JobId]:
+        """
+        Find the oldest job ID by creation time.
+
+        Args:
+            job_ids: List of job IDs to search.
+
+        Returns:
+            Oldest job ID, or None if list is empty.
+        """
+        if not job_ids:
+            return None
+
+        return min(
+            job_ids,
+            key=lambda jid: self._job_creation_times.get(jid, datetime.now()),
+        )

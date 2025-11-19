@@ -303,7 +303,11 @@ class ProcessManager:
         try:
             # Initialize the queue system
             registry = JsonlRegistry(config.registry_path)
-            job_queue = JobQueue(registry)
+            job_queue = JobQueue(
+                registry,
+                max_queue_size=config.max_queue_size,
+                per_job_type_limits=config.per_job_type_limits,
+            )
 
             # Signal that we're ready
             response_queue.put({"status": "ready"})

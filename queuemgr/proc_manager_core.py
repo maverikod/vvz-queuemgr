@@ -305,7 +305,11 @@ class ProcManager:
 
             # Initialize queue system
             registry = JsonlRegistry(config.registry_path)
-            queue = JobQueue(registry=registry)
+            queue = JobQueue(
+                registry=registry,
+                max_queue_size=getattr(config, "max_queue_size", None),
+                per_job_type_limits=getattr(config, "per_job_type_limits", None),
+            )
 
             # Create proc directory
             proc_dir = Path(config.proc_dir)

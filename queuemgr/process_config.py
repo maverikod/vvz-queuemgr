@@ -8,6 +8,7 @@ email: vasilyvz@gmail.com
 """
 
 from dataclasses import dataclass
+from typing import Dict, Optional
 
 
 @dataclass
@@ -18,3 +19,5 @@ class ProcessManagerConfig:
     shutdown_timeout: float = 30.0
     cleanup_interval: float = 60.0
     max_concurrent_jobs: int = 10
+    max_queue_size: Optional[int] = None
+    per_job_type_limits: Optional[Dict[str, int]] = None

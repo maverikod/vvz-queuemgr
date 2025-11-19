@@ -163,7 +163,7 @@ class AsyncProcessManager:
         def get_response():
             try:
                 return self._response_queue.get(timeout=0.1)
-            except:
+            except Exception:
                 return None
 
         # Poll the queue with short timeouts to avoid blocking
@@ -286,7 +286,9 @@ class AsyncProcessManager:
     async def _send_command_async(
         self, command: str, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Send a command to the manager process and wait for response asynchronously."""
+        """
+        Send a command to the manager process and wait for response asynchronously.
+        """
         try:
             if self._control_queue and self._response_queue:
                 # Send command in executor to avoid blocking
@@ -378,7 +380,11 @@ class AsyncProcessManager:
         try:
             # Initialize the queue system
             registry = JsonlRegistry(config.registry_path)
-            job_queue = JobQueue(registry)
+            job_queue = JobQueue(
+                registry,
+                max_queue_size=config.max_queue_size,
+                per_job_type_limits=config.per_job_type_limits,
+            )
 
             # Signal that we're ready
             response_queue.put({"status": "ready"})
