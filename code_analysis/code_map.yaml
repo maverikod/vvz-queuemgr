@@ -883,6 +883,25 @@ classes:
     methods:
     - __init__
     name: ValidationError
+  queuemgr/jobs/registry_job.py:RegistryPlaceholderJob:
+    bases:
+    - QueueJobBase
+    docstring: 'Placeholder job class for jobs loaded from registry.
+
+
+      This class is used to restore job metadata from registry records
+
+      when the original job class is not available. It provides read-only
+
+      access to job status and metadata, but cannot be executed.'
+    file: queuemgr/jobs/registry_job.py
+    line: 17
+    methods:
+    - __init__
+    - execute
+    - get_status
+    - is_running
+    name: RegistryPlaceholderJob
   queuemgr/proc_api.py:ProcQueueSystem:
     bases: []
     docstring: 'Simple API for the queue system using /proc filesystem.
@@ -1031,7 +1050,7 @@ classes:
 
       status lookup, and job operations (add, delete, start, stop, suspend).'
     file: queuemgr/queue/job_queue.py
-    line: 28
+    line: 29
     methods:
     - __init__
     - get_jobs
@@ -1050,6 +1069,7 @@ classes:
     - shutdown
     - _get_jobs_by_type
     - _find_oldest_job_id
+    - _load_jobs_from_registry
     name: JobQueue
   queuemgr/simple_api.py:QueueSystem:
     bases: []
@@ -1408,6 +1428,40 @@ classes:
     - test_limit_of_one
     - test_job_type_not_in_limits
     name: TestJobQueuePerTypeLimits
+  tests/queue/test_job_queue_registry_loading.py:InMemoryRegistry:
+    bases:
+    - Registry
+    docstring: In-memory Registry implementation for tests.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 21
+    methods:
+    - __init__
+    - append
+    - latest
+    - all_latest
+    name: InMemoryRegistry
+  tests/queue/test_job_queue_registry_loading.py:TestJob:
+    bases:
+    - QueueJobBase
+    docstring: Test job class.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 46
+    methods:
+    - execute
+    name: TestJob
+  tests/queue/test_job_queue_registry_loading.py:TestJobQueueRegistryLoading:
+    bases: []
+    docstring: Test registry loading functionality.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 54
+    methods:
+    - test_load_jobs_from_empty_registry
+    - test_load_jobs_from_registry
+    - test_load_jobs_from_file_registry
+    - test_loaded_jobs_are_placeholder
+    - test_add_job_after_loading_from_registry
+    - test_get_job_status_for_loaded_job
+    name: TestJobQueueRegistryLoading
   tests/test_exceptions.py:TestExceptionHierarchy:
     bases: []
     docstring: Test exception hierarchy.
@@ -3603,6 +3657,40 @@ functions:
     file: queuemgr/jobs/exceptions.py
     line: 35
     name: __init__
+  queuemgr/jobs/registry_job.py:__init__:
+    args:
+    - self
+    - job_id
+    - record
+    docstring: "Initialize placeholder job from registry record.\n\nArgs:\n    job_id:\
+      \ Job identifier.\n    record: JobRecord containing job metadata."
+    file: queuemgr/jobs/registry_job.py
+    line: 26
+    name: __init__
+  queuemgr/jobs/registry_job.py:execute:
+    args:
+    - self
+    docstring: "Execute placeholder job (not supported).\n\nRaises:\n    RuntimeError:\
+      \ Always, as placeholder jobs cannot be executed."
+    file: queuemgr/jobs/registry_job.py
+    line: 38
+    name: execute
+  queuemgr/jobs/registry_job.py:get_status:
+    args:
+    - self
+    docstring: "Get job status from registry record.\n\nReturns:\n    Dictionary containing\
+      \ job status information from registry."
+    file: queuemgr/jobs/registry_job.py
+    line: 50
+    name: get_status
+  queuemgr/jobs/registry_job.py:is_running:
+    args:
+    - self
+    docstring: "Check if job is running (always False for placeholder jobs).\n\nReturns:\n\
+      \    False, as placeholder jobs cannot be running."
+    file: queuemgr/jobs/registry_job.py
+    line: 65
+    name: is_running
   queuemgr/proc_api.py:__init__:
     args:
     - self
@@ -4110,7 +4198,7 @@ functions:
       \ for persisting job states.\n    max_queue_size: Global maximum number of jobs\
       \ (optional).\n    per_job_type_limits: Dict mapping job_type to max count (optional)."
     file: queuemgr/queue/job_queue.py
-    line: 34
+    line: 35
     name: __init__
   queuemgr/queue/job_queue.py:_find_oldest_job_id:
     args:
@@ -4119,7 +4207,7 @@ functions:
     docstring: "Find the oldest job ID by creation time.\n\nArgs:\n    job_ids: List\
       \ of job IDs to search.\n\nReturns:\n    Oldest job ID, or None if list is empty."
     file: queuemgr/queue/job_queue.py
-    line: 441
+    line: 445
     name: _find_oldest_job_id
   queuemgr/queue/job_queue.py:_get_jobs_by_type:
     args:
@@ -4128,8 +4216,22 @@ functions:
     docstring: "Get all job IDs of a specific type.\n\nArgs:\n    job_type: Job type\
       \ to filter by.\n\nReturns:\n    List of job IDs of the specified type."
     file: queuemgr/queue/job_queue.py
-    line: 427
+    line: 431
     name: _get_jobs_by_type
+  queuemgr/queue/job_queue.py:_load_jobs_from_registry:
+    args:
+    - self
+    docstring: 'Load existing jobs from registry file.
+
+
+      Creates placeholder job objects for all jobs found in the registry
+
+      that are not already in the job queue. This allows jobs to be
+
+      accessible after a restart.'
+    file: queuemgr/queue/job_queue.py
+    line: 463
+    name: _load_jobs_from_registry
   queuemgr/queue/job_queue.py:add_job:
     args:
     - self
@@ -4140,7 +4242,7 @@ functions:
       \ to add.\n\nReturns:\n    Job ID of the added job.\n\nRaises:\n    JobAlreadyExistsError:\
       \ If job with same ID already exists."
     file: queuemgr/queue/job_queue.py
-    line: 129
+    line: 133
     name: add_job
   queuemgr/queue/job_queue.py:cleanup_completed_jobs:
     args:
@@ -4148,7 +4250,7 @@ functions:
     docstring: "Remove completed and error jobs from the queue.\n\nReturns:\n    Number\
       \ of jobs removed."
     file: queuemgr/queue/job_queue.py
-    line: 374
+    line: 378
     name: cleanup_completed_jobs
   queuemgr/queue/job_queue.py:delete_job:
     args:
@@ -4160,7 +4262,7 @@ functions:
       \ terminate running job.\n\nRaises:\n    JobNotFoundError: If job is not found.\n\
       \    ProcessControlError: If process control fails."
     file: queuemgr/queue/job_queue.py
-    line: 204
+    line: 208
     name: delete_job
   queuemgr/queue/job_queue.py:get_job_by_id:
     args:
@@ -4169,7 +4271,7 @@ functions:
     docstring: "Get a job by its ID.\n\nArgs:\n    job_id: Job identifier to look\
       \ up.\n\nReturns:\n    Job instance if found, None otherwise."
     file: queuemgr/queue/job_queue.py
-    line: 349
+    line: 353
     name: get_job_by_id
   queuemgr/queue/job_queue.py:get_job_count:
     args:
@@ -4177,7 +4279,7 @@ functions:
     docstring: "Get the total number of jobs in the queue.\n\nReturns:\n    Number\
       \ of jobs in the queue."
     file: queuemgr/queue/job_queue.py
-    line: 327
+    line: 331
     name: get_job_count
   queuemgr/queue/job_queue.py:get_job_status:
     args:
@@ -4187,7 +4289,7 @@ functions:
       \nArgs:\n    job_id: Job identifier to look up.\n\nReturns:\n    JobRecord containing\
       \ current job state.\n\nRaises:\n    JobNotFoundError: If job is not found."
     file: queuemgr/queue/job_queue.py
-    line: 100
+    line: 104
     name: get_job_status
   queuemgr/queue/job_queue.py:get_jobs:
     args:
@@ -4195,7 +4297,7 @@ functions:
     docstring: "Return a read-only mapping of job_id -> job instance.\n\nReturns:\n\
       \    Read-only mapping of job IDs to job instances."
     file: queuemgr/queue/job_queue.py
-    line: 56
+    line: 60
     name: get_jobs
   queuemgr/queue/job_queue.py:get_running_jobs:
     args:
@@ -4203,7 +4305,7 @@ functions:
     docstring: "Get all currently running jobs.\n\nReturns:\n    Dictionary of running\
       \ job IDs to job instances."
     file: queuemgr/queue/job_queue.py
-    line: 336
+    line: 340
     name: get_running_jobs
   queuemgr/queue/job_queue.py:list_job_statuses:
     args:
@@ -4211,7 +4313,7 @@ functions:
     docstring: "Get the status of all jobs.\n\nReturns:\n    Dictionary mapping job\
       \ IDs to their current status."
     file: queuemgr/queue/job_queue.py
-    line: 361
+    line: 365
     name: list_job_statuses
   queuemgr/queue/job_queue.py:list_jobs:
     args:
@@ -4220,7 +4322,7 @@ functions:
       \    List of dictionaries describing each job (job_id, status, progress,\n \
       \   metadata) that can be safely serialized to JSON for IPC responses."
     file: queuemgr/queue/job_queue.py
-    line: 65
+    line: 69
     name: list_jobs
   queuemgr/queue/job_queue.py:shutdown:
     args:
@@ -4230,7 +4332,7 @@ functions:
       \ Maximum time to wait for jobs to stop gracefully.\n\nRaises:\n    ProcessControlError:\
       \ If some jobs fail to stop."
     file: queuemgr/queue/job_queue.py
-    line: 397
+    line: 401
     name: shutdown
   queuemgr/queue/job_queue.py:start_job:
     args:
@@ -4241,7 +4343,7 @@ functions:
       \    InvalidJobStateError: If job is not in a startable state.\n    ProcessControlError:\
       \ If process creation fails."
     file: queuemgr/queue/job_queue.py
-    line: 254
+    line: 258
     name: start_job
   queuemgr/queue/job_queue.py:stop_job:
     args:
@@ -4253,7 +4355,7 @@ functions:
       \ (seconds).\n\nRaises:\n    JobNotFoundError: If job is not found.\n    ProcessControlError:\
       \ If stop fails."
     file: queuemgr/queue/job_queue.py
-    line: 288
+    line: 292
     name: stop_job
   queuemgr/queue/job_queue.py:suspend_job:
     args:
@@ -4263,7 +4365,7 @@ functions:
       \ to stopping the job.\n\nArgs:\n    job_id: Job identifier to suspend.\n\n\
       Raises:\n    JobNotFoundError: If job is not found."
     file: queuemgr/queue/job_queue.py
-    line: 313
+    line: 317
     name: suspend_job
   queuemgr/simple_api.py:__init__:
     args:
@@ -5337,6 +5439,86 @@ functions:
     file: tests/queue/test_job_queue_per_type_limits.py
     line: 292
     name: test_limit_of_one
+  tests/queue/test_job_queue_registry_loading.py:__init__:
+    args:
+    - self
+    - records
+    docstring: Initialize registry with optional initial records.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 26
+    name: __init__
+  tests/queue/test_job_queue_registry_loading.py:all_latest:
+    args:
+    - self
+    docstring: Return all latest records.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 41
+    name: all_latest
+  tests/queue/test_job_queue_registry_loading.py:append:
+    args:
+    - self
+    - record
+    docstring: Store the latest record for a job.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 33
+    name: append
+  tests/queue/test_job_queue_registry_loading.py:execute:
+    args:
+    - self
+    docstring: Execute test job.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 49
+    name: execute
+  tests/queue/test_job_queue_registry_loading.py:latest:
+    args:
+    - self
+    - job_id
+    docstring: Return the latest record for a job, if stored.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 37
+    name: latest
+  tests/queue/test_job_queue_registry_loading.py:test_add_job_after_loading_from_registry:
+    args:
+    - self
+    docstring: Test adding new job after loading from registry.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 192
+    name: test_add_job_after_loading_from_registry
+  tests/queue/test_job_queue_registry_loading.py:test_get_job_status_for_loaded_job:
+    args:
+    - self
+    docstring: Test getting status for job loaded from registry.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 221
+    name: test_get_job_status_for_loaded_job
+  tests/queue/test_job_queue_registry_loading.py:test_load_jobs_from_empty_registry:
+    args:
+    - self
+    docstring: Test loading from empty registry.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 57
+    name: test_load_jobs_from_empty_registry
+  tests/queue/test_job_queue_registry_loading.py:test_load_jobs_from_file_registry:
+    args:
+    - self
+    docstring: Test loading jobs from actual JSONL file.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 108
+    name: test_load_jobs_from_file_registry
+  tests/queue/test_job_queue_registry_loading.py:test_load_jobs_from_registry:
+    args:
+    - self
+    docstring: Test loading jobs from registry.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 65
+    name: test_load_jobs_from_registry
+  tests/queue/test_job_queue_registry_loading.py:test_loaded_jobs_are_placeholder:
+    args:
+    - self
+    docstring: Test that loaded jobs are placeholder jobs.
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 161
+    name: test_loaded_jobs_are_placeholder
   tests/test_exceptions.py:test_base_error_creation:
     args:
     - self
@@ -7563,6 +7745,18 @@ imports:
     module: typing
     name: Union
     type: import_from
+  queuemgr/jobs/__init__.py:QueueJobBase:
+    file: queuemgr/jobs/__init__.py
+    line: 8
+    module: base
+    name: QueueJobBase
+    type: import_from
+  queuemgr/jobs/__init__.py:RegistryPlaceholderJob:
+    file: queuemgr/jobs/__init__.py
+    line: 9
+    module: registry_job
+    name: RegistryPlaceholderJob
+    type: import_from
   queuemgr/jobs/base.py:QueueJobBase:
     file: queuemgr/jobs/base.py
     line: 12
@@ -7682,6 +7876,30 @@ imports:
     line: 10
     module: queuemgr.exceptions
     name: QueueManagerError
+    type: import_from
+  queuemgr/jobs/registry_job.py:Any:
+    file: queuemgr/jobs/registry_job.py
+    line: 11
+    module: typing
+    name: Any
+    type: import_from
+  queuemgr/jobs/registry_job.py:Dict:
+    file: queuemgr/jobs/registry_job.py
+    line: 11
+    module: typing
+    name: Dict
+    type: import_from
+  queuemgr/jobs/registry_job.py:JobRecord:
+    file: queuemgr/jobs/registry_job.py
+    line: 14
+    module: queuemgr.core.types
+    name: JobRecord
+    type: import_from
+  queuemgr/jobs/registry_job.py:QueueJobBase:
+    file: queuemgr/jobs/registry_job.py
+    line: 13
+    module: queuemgr.jobs.base
+    name: QueueJobBase
     type: import_from
   queuemgr/proc_api.py:Any:
     file: queuemgr/proc_api.py
@@ -8058,13 +8276,13 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:InvalidJobStateError:
     file: queuemgr/queue/job_queue.py
-    line: 18
+    line: 19
     module: exceptions
     name: InvalidJobStateError
     type: import_from
   queuemgr/queue/job_queue.py:JobAlreadyExistsError:
     file: queuemgr/queue/job_queue.py
-    line: 18
+    line: 19
     module: exceptions
     name: JobAlreadyExistsError
     type: import_from
@@ -8082,7 +8300,7 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:JobNotFoundError:
     file: queuemgr/queue/job_queue.py
-    line: 18
+    line: 19
     module: exceptions
     name: JobNotFoundError
     type: import_from
@@ -8118,7 +8336,7 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:ProcessControlError:
     file: queuemgr/queue/job_queue.py
-    line: 23
+    line: 24
     module: core.exceptions
     name: ProcessControlError
     type: import_from
@@ -8130,9 +8348,15 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:Registry:
     file: queuemgr/queue/job_queue.py
-    line: 16
+    line: 17
     module: queuemgr.core.registry
     name: Registry
+    type: import_from
+  queuemgr/queue/job_queue.py:RegistryPlaceholderJob:
+    file: queuemgr/queue/job_queue.py
+    line: 16
+    module: queuemgr.jobs.registry_job
+    name: RegistryPlaceholderJob
     type: import_from
   queuemgr/queue/job_queue.py:annotations:
     file: queuemgr/queue/job_queue.py
@@ -8142,7 +8366,7 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:create_job_shared_state:
     file: queuemgr/queue/job_queue.py
-    line: 17
+    line: 18
     module: queuemgr.core.ipc
     name: create_job_shared_state
     type: import_from
@@ -8154,7 +8378,7 @@ imports:
     type: import_from
   queuemgr/queue/job_queue.py:get_manager:
     file: queuemgr/queue/job_queue.py
-    line: 17
+    line: 18
     module: queuemgr.core.ipc
     name: get_manager
     type: import_from
@@ -8165,7 +8389,7 @@ imports:
     type: import
   queuemgr/queue/job_queue.py:set_command:
     file: queuemgr/queue/job_queue.py
-    line: 17
+    line: 18
     module: queuemgr.core.ipc
     name: set_command
     type: import_from
@@ -8761,6 +8985,100 @@ imports:
     file: tests/queue/test_job_queue_per_type_limits.py
     line: 259
     name: time
+    type: import
+  tests/queue/test_job_queue_registry_loading.py:Dict:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 12
+    module: typing
+    name: Dict
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:Iterable:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 12
+    module: typing
+    name: Iterable
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:JobId:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 16
+    module: queuemgr.core.types
+    name: JobId
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:JobQueue:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 14
+    module: queuemgr.queue.job_queue
+    name: JobQueue
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:JobRecord:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 16
+    module: queuemgr.core.types
+    name: JobRecord
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:JobStatus:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 16
+    module: queuemgr.core.types
+    name: JobStatus
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:JsonlRegistry:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 137
+    module: queuemgr.core.registry
+    name: JsonlRegistry
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:List:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 12
+    module: typing
+    name: List
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:Optional:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 12
+    module: typing
+    name: Optional
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:Path:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 11
+    module: pathlib
+    name: Path
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:QueueJobBase:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 17
+    module: queuemgr.jobs.base
+    name: QueueJobBase
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:Registry:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 15
+    module: queuemgr.core.registry
+    name: Registry
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:RegistryPlaceholderJob:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 18
+    module: queuemgr.jobs.registry_job
+    name: RegistryPlaceholderJob
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:datetime:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 10
+    module: datetime
+    name: datetime
+    type: import_from
+  tests/queue/test_job_queue_registry_loading.py:json:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 8
+    name: json
+    type: import
+  tests/queue/test_job_queue_registry_loading.py:tempfile:
+    file: tests/queue/test_job_queue_registry_loading.py
+    line: 9
+    name: tempfile
     type: import
   tests/test_exceptions.py:InvalidJobStateError:
     file: tests/test_exceptions.py

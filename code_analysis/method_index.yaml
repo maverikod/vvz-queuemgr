@@ -125,6 +125,10 @@ InMemoryRegistry:
 - append
 - latest
 - all_latest
+- __init__
+- append
+- latest
+- all_latest
 InvalidJobStateError:
 - __init__
 - __init__
@@ -163,6 +167,7 @@ JobQueue:
 - shutdown
 - _get_jobs_by_type
 - _find_oldest_job_id
+- _load_jobs_from_registry
 JobRecord:
 - __post_init__
 JobRequest: []
@@ -381,6 +386,11 @@ RegistryDemoJob:
 RegistryError:
 - __init__
 - __init__
+RegistryPlaceholderJob:
+- __init__
+- execute
+- get_status
+- is_running
 ReportGeneratorJob:
 - __init__
 - execute
@@ -436,6 +446,7 @@ TestInvalidJobStateError:
 - test_invalid_job_state_error_creation
 TestJob:
 - __init__
+- execute
 - execute
 - execute
 - __init__
@@ -507,6 +518,13 @@ TestJobQueuePerTypeLimits:
 - test_eviction_removes_from_registry
 - test_limit_of_one
 - test_job_type_not_in_limits
+TestJobQueueRegistryLoading:
+- test_load_jobs_from_empty_registry
+- test_load_jobs_from_registry
+- test_load_jobs_from_file_registry
+- test_loaded_jobs_are_placeholder
+- test_add_job_after_loading_from_registry
+- test_get_job_status_for_loaded_job
 TestJobRecord:
 - test_job_record_creation
 - test_job_record_immutable

@@ -25,10 +25,10 @@ issues:
     file: queuemgr/async_process_manager.py
     limit: 400
     lines: 473
-  - exceeds_limit: 58
+  - exceeds_limit: 97
     file: queuemgr/queue/job_queue.py
     limit: 400
-    lines: 458
+    lines: 497
   - exceeds_limit: 121
     file: queuemgr/examples/mcp_adapter_example.py
     limit: 400

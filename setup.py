@@ -12,7 +12,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="queuemgr",
-    version="1.0.7",
+    version="1.0.8",
     author="Vasiliy Zdanovskiy",
     author_email="vasilyvz@gmail.com",
     description="Full-featured job queue system with multiprocessing support for Linux",

@@ -50,7 +50,17 @@ def process_command(
         return None
 
     elif command == "get_job_status":
-        return job_queue.get_job_status(params["job_id"])
+        record = job_queue.get_job_status(params["job_id"])
+        # Serialize JobRecord to dict for IPC
+        return {
+            "job_id": record.job_id,
+            "status": record.status.name,
+            "progress": record.progress,
+            "description": record.description,
+            "result": record.result,
+            "created_at": record.created_at.isoformat(),
+            "updated_at": record.updated_at.isoformat(),
+        }
 
     elif command == "list_jobs":
         return job_queue.list_jobs()

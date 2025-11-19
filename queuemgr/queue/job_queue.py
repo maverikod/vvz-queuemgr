@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from queuemgr.core.types import JobId, JobRecord, JobStatus, JobCommand
 from queuemgr.jobs.base import QueueJobBase
+from queuemgr.jobs.registry_job import RegistryPlaceholderJob
 from queuemgr.core.registry import Registry
 from queuemgr.core.ipc import get_manager, create_job_shared_state, set_command
 from .exceptions import (
@@ -52,6 +53,9 @@ class JobQueue:
         self._job_types: Dict[JobId, str] = {}
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits or {}
+
+        # Load existing jobs from registry
+        self._load_jobs_from_registry()
 
     def get_jobs(self) -> Mapping[JobId, QueueJobBase]:
         """
@@ -455,3 +459,38 @@ class JobQueue:
             job_ids,
             key=lambda jid: self._job_creation_times.get(jid, datetime.now()),
         )
+
+    def _load_jobs_from_registry(self) -> None:
+        """
+        Load existing jobs from registry file.
+
+        Creates placeholder job objects for all jobs found in the registry
+        that are not already in the job queue. This allows jobs to be
+        accessible after a restart.
+        """
+        try:
+            for record in self.registry.all_latest():
+                job_id = record.job_id
+
+                # Skip if job already exists
+                if job_id in self._jobs:
+                    continue
+
+                # Create placeholder job from registry record
+                placeholder_job = RegistryPlaceholderJob(job_id, record)
+
+                # Add to jobs dictionary
+                self._jobs[job_id] = placeholder_job
+                self._job_creation_times[job_id] = record.created_at
+                self._job_types[job_id] = "RegistryPlaceholderJob"
+
+                logger.debug(
+                    f"Loaded job {job_id} from registry "
+                    f"(status: {record.status.name})"
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load jobs from registry: {e}. "
+                "Continuing with empty job queue."
+            )
