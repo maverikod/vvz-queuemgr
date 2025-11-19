@@ -1,0 +1,31 @@
+# Author: Vasiliy Zdanovskiy
+# email: vasilyvz@gmail.com
+
+[flake8]
+max-line-length = 88
+ignore =
+exclude =
+    .venv,
+    build,
+    dist,
+    code_analysis,
+    .mypy_cache,
+    .pytest_cache,
+    .ruff_cache,
+    queuemgr.egg-info,
+    __pycache__,
+    logs,
+    *.log
+extend-exclude =
+    .venv,
+    build,
+    dist,
+    code_analysis,
+    .mypy_cache,
+    .pytest_cache,
+    .ruff_cache,
+    queuemgr.egg-info,
+    __pycache__,
+    logs,
+    *.log
+

@@ -8,7 +8,7 @@ email: vasilyvz@gmail.com
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from queuemgr.core.types import JobId, JobRecord, JobStatus, JobCommand
 from queuemgr.jobs.base import QueueJobBase
@@ -48,6 +48,41 @@ class JobQueue:
             Read-only mapping of job IDs to job instances.
         """
         return self._jobs.copy()
+
+    def list_jobs(self) -> List[Dict[str, Any]]:
+        """
+        Return a JSON-serializable snapshot for every queued job.
+
+        Returns:
+            List of dictionaries describing each job (job_id, status, progress,
+            metadata) that can be safely serialized to JSON for IPC responses.
+        """
+        job_snapshots: List[Dict[str, Any]] = []
+
+        for job_id, job in self._jobs.items():
+            status_data = job.get_status()
+            status_value = status_data.get("status", JobStatus.PENDING)
+            created_at = self._job_creation_times.get(job_id, datetime.now())
+
+            if isinstance(status_value, JobStatus):
+                status_text = status_value.name
+            else:
+                status_text = str(status_value)
+
+            job_snapshots.append(
+                {
+                    "job_id": job_id,
+                    "status": status_text,
+                    "progress": int(status_data.get("progress", 0)),
+                    "description": status_data.get("description", ""),
+                    "result": status_data.get("result"),
+                    "is_running": job.is_running(),
+                    "created_at": created_at.isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                }
+            )
+
+        return job_snapshots
 
     def get_job_status(self, job_id: JobId) -> JobRecord:
         """

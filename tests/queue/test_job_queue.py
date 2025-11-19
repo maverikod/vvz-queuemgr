@@ -12,7 +12,4 @@ from .test_job_queue_basic import TestJobQueueBasic
 from .test_job_queue_operations import TestJobQueueOperations
 
 # Re-export for pytest discovery
-__all__ = [
-    'TestJobQueueBasic',
-    'TestJobQueueOperations'
-]
+__all__ = ["TestJobQueueBasic", "TestJobQueueOperations"]

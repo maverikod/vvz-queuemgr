@@ -14,7 +14,7 @@ from .test_base_job_loop import TestQueueJobBaseJobLoop
 
 # Re-export for pytest discovery
 __all__ = [
-    'TestQueueJobBaseInitialization',
-    'TestQueueJobBaseProcessControl', 
-    'TestQueueJobBaseJobLoop'
+    "TestQueueJobBaseInitialization",
+    "TestQueueJobBaseProcessControl",
+    "TestQueueJobBaseJobLoop",
 ]

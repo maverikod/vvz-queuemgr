@@ -5,6 +5,19 @@ ApiCallJob:
 - on_stop
 - on_end
 - on_error
+AsyncProcessManager:
+- __init__
+- is_running
+- _manager_process
+AsyncQueueSystem:
+- __init__
+- is_running
+AsyncSimpleQueue:
+- __init__
+- is_running
+BackgroundTaskJob:
+- __init__
+- run
 CalculationJob:
 - __init__
 - execute
@@ -56,6 +69,10 @@ DataProcessingJob:
 - on_end
 - on_error
 - __init__
+- run
+- __init__
+- run
+- __init__
 - execute
 - on_start
 - on_stop
@@ -75,6 +92,9 @@ ErrorHandlingJob:
 - on_stop
 - on_end
 - on_error
+FastAPIJob:
+- __init__
+- run
 FileAnalysisJob:
 - __init__
 - execute
@@ -84,13 +104,21 @@ FileAnalysisJob:
 - on_error
 FileOperationJob:
 - __init__
+- run
+- __init__
 - execute
 - on_start
 - on_stop
 - on_end
 - on_error
+HealthResponse: []
 IPCError:
 - __init__
+InMemoryRegistry:
+- __init__
+- append
+- latest
+- all_latest
 InvalidJobStateError:
 - __init__
 - __init__
@@ -114,6 +142,7 @@ JobNotFoundError:
 JobQueue:
 - __init__
 - get_jobs
+- list_jobs
 - get_job_status
 - add_job
 - delete_job
@@ -128,7 +157,11 @@ JobQueue:
 - shutdown
 JobRecord:
 - __post_init__
+JobRequest: []
+JobResponse: []
 JobStatus: []
+JobStatusResponse: []
+JobsListResponse: []
 JsonlRegistry:
 - __init__
 - _create_file_lock
@@ -159,6 +192,9 @@ LinuxJob:
 - on_stop
 - on_end
 - on_error
+MCPJob:
+- __init__
+- execute
 NotificationJob:
 - __init__
 - execute
@@ -230,6 +266,18 @@ ProgressJob:
 - on_stop
 - on_end
 - on_error
+QueueAddJobCommand:
+- __init__
+- get_schema
+QueueCommand:
+- __init__
+- get_schema
+QueueGetJobStatusCommand:
+- __init__
+- get_schema
+QueueHealthCommand:
+- __init__
+- get_schema
 QueueJobBase:
 - __init__
 - execute
@@ -251,6 +299,9 @@ QueueJobBase:
 - _handle_completion
 - _handle_error
 - _write_to_registry
+QueueListJobsCommand:
+- __init__
+- get_schema
 QueueManagerCLI:
 - __init__
 - start_service
@@ -288,6 +339,12 @@ QueueManagerWebAPI:
 - delete_job
 - add_job
 - _import_job_class
+QueueStartJobCommand:
+- __init__
+- get_schema
+QueueStopJobCommand:
+- __init__
+- get_schema
 QueueSystem:
 - __init__
 - start
@@ -323,6 +380,8 @@ ReportGeneratorJob:
 - on_stop
 - on_end
 - on_error
+SampleJob:
+- execute
 ServiceExample:
 - __init__
 - run_example
@@ -354,6 +413,9 @@ SimpleJob:
 - on_stop
 - on_end
 - on_error
+SimpleQueueCommand:
+- __init__
+- get_schema
 TestConcurrency:
 - test_concurrent_updates
 TestExceptionHierarchy:
@@ -365,6 +427,8 @@ TestIPCManager:
 TestInvalidJobStateError:
 - test_invalid_job_state_error_creation
 TestJob:
+- __init__
+- execute
 - __init__
 - execute
 - __init__
@@ -406,6 +470,8 @@ TestJobQueueBasic:
 - test_get_running_jobs
 - test_get_job_by_id
 - test_list_job_statuses
+TestJobQueueListJobs:
+- test_list_jobs_returns_serializable_snapshots
 TestJobQueueOperations:
 - test_start_job_not_found
 - test_start_job_invalid_state
@@ -443,6 +509,7 @@ TestJsonlRegistry:
 - setup_method
 - teardown_method
 - test_registry_initialization
+- test_registry_handles_relative_path
 - test_append_single_record
 - test_append_multiple_records
 - test_append_update_same_job
@@ -502,3 +569,6 @@ TimeoutError:
 ValidationError:
 - __init__
 - __init__
+WebJob:
+- __init__
+- run

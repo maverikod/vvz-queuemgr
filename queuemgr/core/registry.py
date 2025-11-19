@@ -86,8 +86,10 @@ class JsonlRegistry(Registry):
         self._latest_records: Dict[JobId, JobRecord] = {}
         self._lock = self._create_file_lock()
 
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # Ensure directory exists if provided
+        registry_dir = os.path.dirname(path)
+        if registry_dir:
+            os.makedirs(registry_dir, exist_ok=True)
 
         # Create file if it doesn't exist
         if not os.path.exists(path):

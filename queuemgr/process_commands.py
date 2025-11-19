@@ -53,7 +53,7 @@ def process_command(
         return job_queue.get_job_status(params["job_id"])
 
     elif command == "list_jobs":
-        return job_queue.get_jobs()
+        return job_queue.list_jobs()
 
     else:
         raise ValueError(f"Unknown command: {command}")

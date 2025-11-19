@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "queuemgr"
-version = "1.0.4"
+version = "1.0.6"
 authors = [
     {name = "Vasiliy Zdanovskiy", email = "vasilyvz@gmail.com"},
 ]
@@ -72,3 +72,20 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.flake8]
+ignore = []
+max-line-length = 88
+extend-exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "code_analysis",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "queuemgr.egg-info",
+    "__pycache__",
+    "logs",
+    "*.log",
+]
