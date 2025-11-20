@@ -7,7 +7,7 @@ email: vasilyvz@gmail.com
 
 import json
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, Optional
 
 from queuemgr.core.registry import Registry
 from queuemgr.core.types import JobId, JobRecord, JobStatus

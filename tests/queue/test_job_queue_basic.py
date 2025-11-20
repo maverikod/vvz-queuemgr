@@ -6,7 +6,7 @@ email: vasilyvz@gmail.com
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from queuemgr.queue.job_queue import JobQueue
 from queuemgr.jobs.base import QueueJobBase
@@ -48,7 +48,7 @@ class TestJobQueueBasic:
         queue = JobQueue()
 
         jobs = queue.get_jobs()
-        assert jobs == []
+        assert jobs == {}
 
     def test_get_jobs_with_jobs(self):
         """Test getting jobs from queue with jobs."""
@@ -60,7 +60,8 @@ class TestJobQueueBasic:
 
         jobs = queue.get_jobs()
         assert len(jobs) == 1
-        assert jobs[0].job_id == "test-job-1"
+        assert "test-job-1" in jobs
+        assert jobs["test-job-1"] is job
 
     def test_get_job_status_not_found(self):
         """Test getting status of non-existent job."""
@@ -78,9 +79,9 @@ class TestJobQueueBasic:
         queue._jobs["test-job-1"] = job
 
         status = queue.get_job_status("test-job-1")
-        assert status["job_id"] == "test-job-1"
-        assert "status" in status
-        assert "created_at" in status
+        assert status.job_id == "test-job-1"
+        assert status.status is not None
+        assert status.created_at is not None
 
     def test_add_job_success(self):
         """Test successful job addition."""

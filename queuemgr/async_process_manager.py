@@ -10,18 +10,14 @@ email: vasilyvz@gmail.com
 
 import asyncio
 import logging
-import signal
 import time
 from multiprocessing import Process, Queue, Event
-from queue import Empty
 from typing import Dict, Any, Optional, Callable
 from contextlib import asynccontextmanager
 
-from .queue.job_queue import JobQueue
-from .core.registry import JsonlRegistry
 from queuemgr.core.exceptions import ProcessControlError
 from .process_config import ProcessManagerConfig
-from .process_commands import process_command
+from .async_process_runner import run_async_process_manager
 
 
 logger = logging.getLogger("queuemgr.async_process_manager")
@@ -69,7 +65,7 @@ class AsyncProcessManager:
 
         # Start the manager process
         self._process = Process(
-            target=self._manager_process,
+            target=run_async_process_manager,
             name="AsyncQueueManager",
             args=(
                 self._control_queue,
@@ -161,6 +157,7 @@ class AsyncProcessManager:
         loop = asyncio.get_event_loop()
 
         def get_response():
+            """Attempt to read a single message from the response queue."""
             try:
                 return self._response_queue.get(timeout=0.1)
             except Exception:
@@ -295,6 +292,7 @@ class AsyncProcessManager:
                 loop = asyncio.get_event_loop()
 
                 def send_command():
+                    """Put the serialized command into the control queue."""
                     self._control_queue.put({"command": command, "params": params})
 
                 await loop.run_in_executor(None, send_command)
@@ -339,110 +337,6 @@ class AsyncProcessManager:
                 "Async manager command '%s' failed unexpectedly: %s", command, e
             )
             raise ProcessControlError("manager", command, f"Command failed: {e}")
-
-    @staticmethod
-    def _manager_process(
-        control_queue: Queue,
-        response_queue: Queue,
-        shutdown_event: Event,
-        config: ProcessManagerConfig,
-    ) -> None:
-        """
-        Main process function for the manager.
-
-        Args:
-            control_queue: Queue for receiving commands.
-            response_queue: Queue for sending responses.
-            shutdown_event: Event for shutdown signaling.
-            config: Manager configuration.
-        """
-
-        # Set up signal handlers for graceful shutdown
-        def signal_handler(signum, frame):
-            """
-            Handle OS signals for graceful shutdown.
-
-            Args:
-                signum: Signal number.
-                frame: Current stack frame.
-            """
-            shutdown_event.set()
-
-        # Only register signals in the main thread
-        try:
-            signal.signal(signal.SIGTERM, signal_handler)
-            signal.signal(signal.SIGINT, signal_handler)
-        except ValueError:
-            # Signals can only be registered in the main thread
-            # This is expected in subprocesses, so we ignore the error
-            pass
-
-        try:
-            # Initialize the queue system
-            registry = JsonlRegistry(config.registry_path)
-            job_queue = JobQueue(
-                registry,
-                max_queue_size=config.max_queue_size,
-                per_job_type_limits=config.per_job_type_limits,
-            )
-
-            # Signal that we're ready
-            response_queue.put({"status": "ready"})
-
-            # Main command loop
-            cleanup_timer = time.time()
-
-            while not shutdown_event.is_set():
-                try:
-                    command_data: Optional[Dict[str, Any]] = None
-                    try:
-                        command_data = control_queue.get(timeout=1.0)
-                    except Empty:
-                        # No commands were received during this window.
-                        pass
-
-                    if command_data:
-                        command = command_data.get("command")
-                        params = command_data.get("params", {})
-
-                        if command == "shutdown":
-                            break
-
-                        try:
-                            result = process_command(job_queue, command, params)
-                        except (
-                            Exception
-                        ) as command_error:  # pylint: disable=broad-except
-                            error_message = (
-                                f"[manager] Command '{command}' failed: {command_error}"
-                            )
-                            logger.exception(
-                                "Async queue manager failed to process command '%s'",
-                                command,
-                            )
-                            response_queue.put(
-                                {"status": "error", "error": error_message}
-                            )
-                        else:
-                            response_queue.put({"status": "success", "result": result})
-
-                    # Periodic cleanup
-                    if time.time() - cleanup_timer > config.cleanup_interval:
-                        job_queue.cleanup_completed_jobs()
-                        cleanup_timer = time.time()
-
-                except Exception as loop_error:  # pylint: disable=broad-except
-                    error_message = f"[manager] Command loop failed: {loop_error}"
-                    logger.exception("Async queue manager loop failure")
-                    response_queue.put({"status": "error", "error": error_message})
-
-            # Graceful shutdown
-            job_queue.shutdown()
-
-        except Exception as e:
-            response_queue.put(
-                {"status": "error", "error": f"Manager initialization failed: {e}"}
-            )
 
 
 @asynccontextmanager

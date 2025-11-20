@@ -83,10 +83,12 @@ class ProcQueueSystem:
 
     def is_running(self) -> bool:
         """Check if the queue system is running."""
-        return (
-            self._is_initialized
-            and self._manager is not None
-            and self._manager.is_running()
+        return all(
+            [
+                self._is_initialized,
+                self._manager is not None,
+                self._manager.is_running(),
+            ]
         )
 
     def add_job(

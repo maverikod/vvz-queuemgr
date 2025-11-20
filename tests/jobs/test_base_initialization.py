@@ -6,10 +6,11 @@ email: vasilyvz@gmail.com
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.exceptions import ValidationError
+from queuemgr.core.types import JobStatus
 
 
 class TestJob(QueueJobBase):
@@ -85,7 +86,7 @@ class TestQueueJobBaseInitialization:
 
         # Mock shared state
         mock_status = Mock()
-        mock_status.value = 2  # RUNNING
+        mock_status.value = JobStatus.RUNNING.value
         mock_command = Mock()
         mock_command.value = 1  # START
         mock_progress = Mock()
@@ -94,6 +95,7 @@ class TestQueueJobBaseInitialization:
         mock_description.value = b"Test description"
         mock_result = Mock()
         mock_result.value = {"test": "result"}
+        mock_lock = Mock()
 
         shared_state = {
             "status": mock_status,
@@ -101,6 +103,7 @@ class TestQueueJobBaseInitialization:
             "progress": mock_progress,
             "description": mock_description,
             "result": mock_result,
+            "lock": mock_lock,
         }
 
         job._set_shared_state(shared_state)

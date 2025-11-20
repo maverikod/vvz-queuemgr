@@ -20,28 +20,71 @@ from queuemgr.core.types import JobStatus
 
 # Pydantic models for API
 class JobRequest(BaseModel):
+    """
+    Request payload describing a job to create via FastAPI endpoint.
+
+    Attributes:
+        job_type: Name of the job class to schedule.
+        job_id: External identifier that must be unique within registry.
+        params: Arbitrary job parameters passed to the job constructor.
+    """
+
     job_type: str
     job_id: str
     params: Dict[str, Any] = {}
 
 
 class JobResponse(BaseModel):
+    """
+    Response payload confirming operations performed on a job.
+
+    Attributes:
+        message: Human-readable description of the operation outcome.
+        job_id: Identifier of the affected job.
+        job_type: Optional job type associated with the response.
+    """
+
     message: str
     job_id: str
     job_type: Optional[str] = None
 
 
 class JobStatusResponse(BaseModel):
+    """
+    Response payload containing status details for a single job.
+
+    Attributes:
+        job_id: Identifier of the job being described.
+        status: Serialized job status dictionary returned by queue system.
+    """
+
     job_id: str
     status: Dict[str, Any]
 
 
 class JobsListResponse(BaseModel):
+    """
+    Response payload listing all known jobs with total count.
+
+    Attributes:
+        jobs: Collection of serialized job entries from queue system.
+        count: Total number of jobs returned in the response.
+    """
+
     jobs: List[Dict[str, Any]]
     count: int
 
 
 class HealthResponse(BaseModel):
+    """
+    Health-check response describing queue state and timestamp.
+
+    Attributes:
+        status: Textual indicator such as ``healthy`` or ``unhealthy``.
+        queue_running: True when the queue manager is active.
+        timestamp: Event loop timestamp corresponding to the health check.
+    """
+
     status: str
     queue_running: bool
     timestamp: float

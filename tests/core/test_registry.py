@@ -308,9 +308,12 @@ class TestJsonlRegistry:
         now = datetime.now().isoformat()
         with open(self.registry_path, "w") as f:
             f.write("invalid json line 1\n")
-            f.write(
-                f'{{"job_id": "test-job-1", "status": 2, "progress": 0, "description": "Test", "result": null, "created_at": "{now}", "updated_at": "{now}"}}\n'
-            )  # Valid line
+            valid_line = (
+                '{"job_id": "test-job-1", "status": 2, "progress": 0,'
+                ' "description": "Test", "result": null,'
+                f' "created_at": "{now}", "updated_at": "{now}"}}'
+            )
+            f.write(valid_line + "\n")  # Valid line
             f.write("another invalid line\n")
 
         # Create new registry instance

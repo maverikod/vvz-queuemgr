@@ -10,7 +10,6 @@ ApiCallJob:
 AsyncProcessManager:
 - __init__
 - is_running
-- _manager_process
 AsyncQueueSystem:
 - __init__
 - is_running
@@ -73,8 +72,6 @@ DataProcessingJob:
 - __init__
 - run
 - __init__
-- run
-- __init__
 - execute
 - on_start
 - on_stop
@@ -106,8 +103,6 @@ FileAnalysisJob:
 - on_error
 FileOperationJob:
 - __init__
-- run
-- __init__
 - execute
 - on_start
 - on_stop
@@ -117,6 +112,10 @@ HealthResponse: []
 IPCError:
 - __init__
 InMemoryRegistry:
+- __init__
+- append
+- latest
+- all_latest
 - __init__
 - append
 - latest
@@ -159,15 +158,15 @@ JobQueue:
 - start_job
 - stop_job
 - suspend_job
+- shutdown
+JobQueueMetricsMixin:
 - get_job_count
 - get_running_jobs
 - get_job_by_id
 - list_job_statuses
 - cleanup_completed_jobs
-- shutdown
 - _get_jobs_by_type
 - _find_oldest_job_id
-- _load_jobs_from_registry
 JobRecord:
 - __post_init__
 JobRequest: []
@@ -234,8 +233,6 @@ ProcManager:
 - _send_command
 - _wait_for_ready
 - _cleanup
-- _manager_process
-- _process_command
 ProcManagerConfig: []
 ProcQueueSystem:
 - __init__
@@ -611,3 +608,6 @@ ValidationError:
 WebJob:
 - __init__
 - run
+_QueueCommandBase:
+- __init__
+- _get_queue

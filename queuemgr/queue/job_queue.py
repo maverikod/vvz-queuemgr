@@ -9,24 +9,26 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Type, Union
 
 from queuemgr.core.types import JobId, JobRecord, JobStatus, JobCommand
 from queuemgr.jobs.base import QueueJobBase
-from queuemgr.jobs.registry_job import RegistryPlaceholderJob
-from queuemgr.core.registry import Registry
+from queuemgr.core.registry import Registry, InMemoryRegistry
 from queuemgr.core.ipc import get_manager, create_job_shared_state, set_command
-from .exceptions import (
+from queuemgr.exceptions import (
     JobNotFoundError,
     JobAlreadyExistsError,
     InvalidJobStateError,
+    ProcessControlError,
 )
-from ..core.exceptions import ProcessControlError
+from .job_registry_loader import load_jobs_from_registry
+from .job_queue_limits import enforce_global_limit, enforce_per_type_limit
+from .job_queue_metrics import JobQueueMetricsMixin
 
 logger = logging.getLogger("queuemgr.queue.job_queue")
 
 
-class JobQueue:
+class JobQueue(JobQueueMetricsMixin):
     """
     Coordinator for job lifecycle and IPC state. Provides dictionary of jobs,
     status lookup, and job operations (add, delete, start, stop, suspend).
@@ -34,7 +36,7 @@ class JobQueue:
 
     def __init__(
         self,
-        registry: Registry,
+        registry: Optional[Registry] = None,
         max_queue_size: Optional[int] = None,
         per_job_type_limits: Optional[Dict[str, int]] = None,
     ) -> None:
@@ -46,7 +48,9 @@ class JobQueue:
             max_queue_size: Global maximum number of jobs (optional).
             per_job_type_limits: Dict mapping job_type to max count (optional).
         """
-        self.registry = registry
+        self.registry = registry or InMemoryRegistry()
+        # Backward-compatibility alias expected by tests and legacy code.
+        self._registry = self.registry
         self._jobs: Dict[JobId, QueueJobBase] = {}
         self._manager = get_manager()
         self._job_creation_times: Dict[JobId, datetime] = {}
@@ -55,7 +59,13 @@ class JobQueue:
         self.per_job_type_limits = per_job_type_limits or {}
 
         # Load existing jobs from registry
-        self._load_jobs_from_registry()
+        load_jobs_from_registry(
+            registry=self.registry,
+            jobs=self._jobs,
+            job_creation_times=self._job_creation_times,
+            job_types=self._job_types,
+            logger=logger,
+        )
 
     def get_jobs(self) -> Mapping[JobId, QueueJobBase]:
         """
@@ -120,17 +130,24 @@ class JobQueue:
         job = self._jobs[job_id]
         status_data = job.get_status()
 
+        created_at = self._job_creation_times.get(job_id, datetime.now())
+
         return JobRecord(
             job_id=job_id,
             status=status_data["status"],
             progress=status_data["progress"],
             description=status_data["description"],
             result=status_data["result"],
-            created_at=self._job_creation_times[job_id],
+            created_at=created_at,
             updated_at=datetime.now(),
         )
 
-    def add_job(self, job: QueueJobBase) -> JobId:
+    def add_job(
+        self,
+        job: Union[QueueJobBase, Type[QueueJobBase]],
+        job_id: Optional[JobId] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> JobId:
         """
         Add a new job; returns its job_id. Initial state is PENDING.
 
@@ -138,7 +155,9 @@ class JobQueue:
         the oldest job of this type will be removed first (FIFO eviction).
 
         Args:
-            job: Job instance to add.
+            job: Job instance or QueueJobBase subclass to add.
+            job_id: Job identifier when providing a class instead of an instance.
+            params: Parameters to pass to the job constructor when a class is provided.
 
         Returns:
             Job ID of the added job.
@@ -146,64 +165,67 @@ class JobQueue:
         Raises:
             JobAlreadyExistsError: If job with same ID already exists.
         """
-        if job.job_id in self._jobs:
-            raise JobAlreadyExistsError(job.job_id)
+        if isinstance(job, type):
+            if not issubclass(job, QueueJobBase):
+                raise TypeError("job must be a QueueJobBase subclass")
+            if job_id is None:
+                raise ValueError("job_id must be provided when adding by class")
+            job_instance = job(job_id, params or {})
+        else:
+            job_instance = job
+
+        if job_instance.job_id in self._jobs:
+            raise JobAlreadyExistsError(job_instance.job_id)
 
         # Determine job type from class name
-        job_type = job.__class__.__name__
+        job_type = job_instance.__class__.__name__
 
-        # Check per-job-type limit and evict if necessary
-        if self.per_job_type_limits and job_type in self.per_job_type_limits:
-            limit = self.per_job_type_limits[job_type]
-            existing_jobs = self._get_jobs_by_type(job_type)
+        def delete_job_callback(target_job_id: JobId) -> None:
+            """Internal helper to delete jobs during eviction."""
+            self.delete_job(target_job_id, force=True)
 
-            if len(existing_jobs) >= limit:
-                # Find and remove oldest job of this type
-                oldest_job_id = self._find_oldest_job_id(existing_jobs)
-                if oldest_job_id:
-                    logger.info(
-                        f"Evicting oldest {job_type} job {oldest_job_id} "
-                        f"(limit: {limit}, adding: {job.job_id})"
-                    )
-                    self.delete_job(oldest_job_id, force=True)
+        enforce_per_type_limit(
+            job_type=job_type,
+            new_job_id=job_instance.job_id,
+            per_job_type_limits=self.per_job_type_limits,
+            job_types=self._job_types,
+            job_creation_times=self._job_creation_times,
+            delete_callback=delete_job_callback,
+            logger=logger,
+        )
 
-        # Check global queue size limit if configured
-        if self.max_queue_size and len(self._jobs) >= self.max_queue_size:
-            # Find oldest job overall
-            if self._jobs:
-                oldest_job_id = min(
-                    self._jobs.keys(),
-                    key=lambda jid: self._job_creation_times.get(jid, datetime.now()),
-                )
-                logger.info(
-                    f"Evicting oldest job {oldest_job_id} "
-                    f"(global limit: {self.max_queue_size}, adding: {job.job_id})"
-                )
-                self.delete_job(oldest_job_id, force=True)
+        enforce_global_limit(
+            new_job_id=job_instance.job_id,
+            jobs=self._jobs,
+            job_creation_times=self._job_creation_times,
+            max_queue_size=self.max_queue_size,
+            delete_callback=delete_job_callback,
+            logger=logger,
+        )
 
         # Set up shared state for the job
         shared_state = create_job_shared_state(self._manager)
-        job._set_shared_state(shared_state)
-        job._set_registry(self.registry)
+        job_instance._set_shared_state(shared_state)
+        job_instance._set_registry(self.registry)
 
         # Add to jobs dictionary
-        self._jobs[job.job_id] = job
-        self._job_creation_times[job.job_id] = datetime.now()
-        self._job_types[job.job_id] = job_type
+        self._jobs[job_instance.job_id] = job_instance
+        self._job_creation_times[job_instance.job_id] = datetime.now()
+        self._job_types[job_instance.job_id] = job_type
 
         # Write initial state to registry
         initial_record = JobRecord(
-            job_id=job.job_id,
+            job_id=job_instance.job_id,
             status=JobStatus.PENDING,
             progress=0,
             description="Job created",
             result=None,
-            created_at=self._job_creation_times[job.job_id],
+            created_at=self._job_creation_times[job_instance.job_id],
             updated_at=datetime.now(),
         )
         self.registry.append(initial_record)
 
-        return job.job_id
+        return job_instance.job_id
 
     def delete_job(self, job_id: JobId, force: bool = False) -> None:
         """
@@ -328,76 +350,6 @@ class JobQueue:
         """
         self.stop_job(job_id)
 
-    def get_job_count(self) -> int:
-        """
-        Get the total number of jobs in the queue.
-
-        Returns:
-            Number of jobs in the queue.
-        """
-        return len(self._jobs)
-
-    def get_running_jobs(self) -> Dict[JobId, QueueJobBase]:
-        """
-        Get all currently running jobs.
-
-        Returns:
-            Dictionary of running job IDs to job instances.
-        """
-        running_jobs = {}
-        for job_id, job in self._jobs.items():
-            if job.is_running():
-                running_jobs[job_id] = job
-        return running_jobs
-
-    def get_job_by_id(self, job_id: JobId) -> Optional[QueueJobBase]:
-        """
-        Get a job by its ID.
-
-        Args:
-            job_id: Job identifier to look up.
-
-        Returns:
-            Job instance if found, None otherwise.
-        """
-        return self._jobs.get(job_id)
-
-    def list_job_statuses(self) -> Dict[JobId, JobStatus]:
-        """
-        Get the status of all jobs.
-
-        Returns:
-            Dictionary mapping job IDs to their current status.
-        """
-        statuses = {}
-        for job_id, job in self._jobs.items():
-            status_data = job.get_status()
-            statuses[job_id] = status_data["status"]
-        return statuses
-
-    def cleanup_completed_jobs(self) -> int:
-        """
-        Remove completed and error jobs from the queue.
-
-        Returns:
-            Number of jobs removed.
-        """
-        jobs_to_remove = []
-
-        for job_id, job in self._jobs.items():
-            status_data = job.get_status()
-            if status_data["status"] in [JobStatus.COMPLETED, JobStatus.ERROR]:
-                jobs_to_remove.append(job_id)
-
-        for job_id in jobs_to_remove:
-            del self._jobs[job_id]
-            if job_id in self._job_creation_times:
-                del self._job_creation_times[job_id]
-            if job_id in self._job_types:
-                del self._job_types[job_id]
-
-        return len(jobs_to_remove)
-
     def shutdown(self, timeout: float = 30.0) -> None:
         """
         Shutdown the queue, stopping all running jobs.
@@ -427,70 +379,3 @@ class JobQueue:
         self._jobs.clear()
         self._job_creation_times.clear()
         self._job_types.clear()
-
-    def _get_jobs_by_type(self, job_type: str) -> List[JobId]:
-        """
-        Get all job IDs of a specific type.
-
-        Args:
-            job_type: Job type to filter by.
-
-        Returns:
-            List of job IDs of the specified type.
-        """
-        return [
-            job_id for job_id, jtype in self._job_types.items() if jtype == job_type
-        ]
-
-    def _find_oldest_job_id(self, job_ids: List[JobId]) -> Optional[JobId]:
-        """
-        Find the oldest job ID by creation time.
-
-        Args:
-            job_ids: List of job IDs to search.
-
-        Returns:
-            Oldest job ID, or None if list is empty.
-        """
-        if not job_ids:
-            return None
-
-        return min(
-            job_ids,
-            key=lambda jid: self._job_creation_times.get(jid, datetime.now()),
-        )
-
-    def _load_jobs_from_registry(self) -> None:
-        """
-        Load existing jobs from registry file.
-
-        Creates placeholder job objects for all jobs found in the registry
-        that are not already in the job queue. This allows jobs to be
-        accessible after a restart.
-        """
-        try:
-            for record in self.registry.all_latest():
-                job_id = record.job_id
-
-                # Skip if job already exists
-                if job_id in self._jobs:
-                    continue
-
-                # Create placeholder job from registry record
-                placeholder_job = RegistryPlaceholderJob(job_id, record)
-
-                # Add to jobs dictionary
-                self._jobs[job_id] = placeholder_job
-                self._job_creation_times[job_id] = record.created_at
-                self._job_types[job_id] = "RegistryPlaceholderJob"
-
-                logger.debug(
-                    f"Loaded job {job_id} from registry "
-                    f"(status: {record.status.name})"
-                )
-
-        except Exception as e:
-            logger.warning(
-                f"Failed to load jobs from registry: {e}. "
-                "Continuing with empty job queue."
-            )

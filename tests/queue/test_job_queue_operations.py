@@ -15,7 +15,7 @@ from queuemgr.exceptions import (
     InvalidJobStateError,
     ProcessControlError,
 )
-from queuemgr.core.types import JobStatus
+from queuemgr.core.types import JobStatus, JobCommand
 
 
 class TestJob(QueueJobBase):
@@ -87,7 +87,14 @@ class TestJobQueueOperations:
         with patch.object(queue._jobs["test-job-1"], "start_process") as mock_start:
             with patch("queuemgr.queue.job_queue.set_command") as mock_set_command:
                 # Mock shared state
-                queue._jobs["test-job-1"]._shared_state = {"command": Mock()}
+                queue._jobs["test-job-1"]._shared_state = {
+                    "status": Mock(value=JobStatus.PENDING.value),
+                    "command": Mock(value=JobCommand.NONE.value),
+                    "progress": Mock(value=0),
+                    "description": Mock(value=b""),
+                    "result": Mock(value=None),
+                    "lock": Mock(),
+                }
 
                 queue.start_job("test-job-1")
 

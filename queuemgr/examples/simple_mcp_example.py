@@ -24,6 +24,13 @@ class TestJob(QueueJobBase):
     """Simple test job for MCP adapter."""
 
     def __init__(self, job_id: str, params: dict):
+        """
+        Initialize job metadata used for demonstration.
+
+        Args:
+            job_id: Unique identifier for the job.
+            params: Input parameters, expects optional message text.
+        """
         super().__init__(job_id, params)
         self.message = params.get("message", "Default message")
 
@@ -53,6 +60,7 @@ class SimpleQueueCommand(Command):
     """Simple queue command for testing."""
 
     def __init__(self):
+        """Configure metadata for the simple_queue MCP command."""
         super().__init__()
         self.name = "simple_queue"
         self.description = "Simple queue command for testing"

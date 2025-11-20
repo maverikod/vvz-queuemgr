@@ -1,141 +1,22 @@
 issues:
   any_type_usage: []
-  classes_without_docstrings:
-  - class: JobRequest
-    file: queuemgr/examples/async_fastapi_example.py
-    line: 22
-  - class: JobResponse
-    file: queuemgr/examples/async_fastapi_example.py
-    line: 28
-  - class: JobStatusResponse
-    file: queuemgr/examples/async_fastapi_example.py
-    line: 34
-  - class: JobsListResponse
-    file: queuemgr/examples/async_fastapi_example.py
-    line: 39
-  - class: HealthResponse
-    file: queuemgr/examples/async_fastapi_example.py
-    line: 44
-  files_too_large:
-  - exceeds_limit: 7
-    file: queuemgr/proc_manager_core.py
-    limit: 400
-    lines: 407
-  - exceeds_limit: 73
-    file: queuemgr/async_process_manager.py
-    limit: 400
-    lines: 473
-  - exceeds_limit: 97
-    file: queuemgr/queue/job_queue.py
-    limit: 400
-    lines: 497
-  - exceeds_limit: 121
-    file: queuemgr/examples/mcp_adapter_example.py
-    limit: 400
-    lines: 521
+  classes_without_docstrings: []
+  files_too_large: []
   files_without_docstrings: []
   generic_exception_usage: []
   imports_in_middle: []
   methods_with_pass: []
-  methods_without_docstrings:
-  - class: null
-    file: queuemgr/async_process_manager.py
-    line: 163
-    method: get_response
-  - class: null
-    file: queuemgr/async_process_manager.py
-    line: 297
-    method: send_command
-  - class: MCPJob
-    file: queuemgr/examples/working_mcp_server.py
-    line: 27
-    method: __init__
-  - class: QueueCommand
-    file: queuemgr/examples/working_mcp_server.py
-    line: 63
-    method: __init__
-  - class: null
-    file: queuemgr/examples/working_mcp_server.py
-    line: 27
-    method: __init__
-  - class: null
-    file: queuemgr/examples/working_mcp_server.py
-    line: 63
-    method: __init__
-  - class: QueueAddJobCommand
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 219
-    method: __init__
-  - class: QueueStartJobCommand
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 276
-    method: __init__
-  - class: QueueStopJobCommand
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 315
-    method: __init__
-  - class: QueueGetJobStatusCommand
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 354
-    method: __init__
-  - class: QueueListJobsCommand
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 392
-    method: __init__
-  - class: QueueHealthCommand
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 419
-    method: __init__
-  - class: null
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 219
-    method: __init__
-  - class: null
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 276
-    method: __init__
-  - class: null
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 315
-    method: __init__
-  - class: null
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 354
-    method: __init__
-  - class: null
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 392
-    method: __init__
-  - class: null
-    file: queuemgr/examples/mcp_adapter_example.py
-    line: 419
-    method: __init__
-  - class: TestJob
-    file: queuemgr/examples/simple_mcp_example.py
-    line: 26
-    method: __init__
-  - class: SimpleQueueCommand
-    file: queuemgr/examples/simple_mcp_example.py
-    line: 55
-    method: __init__
-  - class: null
-    file: queuemgr/examples/simple_mcp_example.py
-    line: 26
-    method: __init__
-  - class: null
-    file: queuemgr/examples/simple_mcp_example.py
-    line: 55
-    method: __init__
+  methods_without_docstrings: []
   not_implemented_in_non_abstract: []
 summary:
   any_type_usage: 0
-  classes_without_docstrings: 5
-  files_too_large: 4
+  classes_without_docstrings: 0
+  files_too_large: 0
   files_without_docstrings: 0
   generic_exception_usage: 0
   imports_in_middle: 0
   max_lines_limit: 400
   methods_with_pass: 0
-  methods_without_docstrings: 22
+  methods_without_docstrings: 0
   not_implemented_in_non_abstract: 0
-  total_issues: 31
+  total_issues: 0

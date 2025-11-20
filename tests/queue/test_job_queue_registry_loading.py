@@ -240,4 +240,3 @@ class TestJobQueueRegistryLoading:
         assert status.progress == 50
         assert status.description == "Error occurred"
         assert status.result == {"error": "Test error"}
-

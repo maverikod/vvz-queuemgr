@@ -6,7 +6,7 @@ email: vasilyvz@gmail.com
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.exceptions import ProcessControlError
@@ -37,7 +37,7 @@ class TestQueueJobBaseProcessControl:
         """Test successful process start."""
         job = TestJob("test-job-1", {})
 
-        with patch("multiprocessing.Process") as mock_process_class:
+        with patch("queuemgr.jobs.base_core.Process") as mock_process_class:
             mock_process = Mock()
             mock_process_class.return_value = mock_process
 
@@ -52,7 +52,7 @@ class TestQueueJobBaseProcessControl:
 
         # Mock existing process
         mock_process = Mock()
-        mock_process.is_alive.return_value = True
+        mock_process.is_alive.side_effect = [True, False]
         job._process = mock_process
 
         with pytest.raises(ProcessControlError):
@@ -62,7 +62,7 @@ class TestQueueJobBaseProcessControl:
         """Test process start failure."""
         job = TestJob("test-job-1", {})
 
-        with patch("multiprocessing.Process") as mock_process_class:
+        with patch("queuemgr.jobs.base_core.Process") as mock_process_class:
             mock_process = Mock()
             mock_process.start.side_effect = Exception("Start failed")
             mock_process_class.return_value = mock_process
@@ -83,7 +83,7 @@ class TestQueueJobBaseProcessControl:
 
         # Mock process
         mock_process = Mock()
-        mock_process.is_alive.return_value = True
+        mock_process.is_alive.side_effect = [True, False]
         job._process = mock_process
 
         job.stop_process()
@@ -96,7 +96,7 @@ class TestQueueJobBaseProcessControl:
 
         # Mock process
         mock_process = Mock()
-        mock_process.is_alive.return_value = True
+        mock_process.is_alive.side_effect = [True, False]
         job._process = mock_process
 
         job.stop_process(timeout=5.0)

@@ -5,11 +5,22 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from queuemgr.jobs.base import QueueJobBase
-from queuemgr.core.types import JobCommand, JobStatus
+from queuemgr.core.types import JobCommand
+
+
+def _make_shared_state():
+    """Create a shared-state dictionary populated with mock proxies."""
+    return {
+        "status": Mock(),
+        "command": Mock(),
+        "progress": Mock(),
+        "description": Mock(),
+        "result": Mock(),
+        "lock": Mock(),
+    }
 
 
 class TestJob(QueueJobBase):
@@ -39,17 +50,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return START then NONE
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.side_effect = [JobCommand.START, JobCommand.NONE]
 
             # Mock execute
@@ -63,17 +68,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return STOP
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.return_value = JobCommand.STOP
 
             # Mock _handle_stop
@@ -87,17 +86,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return DELETE
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.return_value = JobCommand.DELETE
 
             # Mock _handle_delete
@@ -111,17 +104,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return START then NONE
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.side_effect = [JobCommand.START, JobCommand.NONE]
 
             # Mock execute to raise exception
@@ -137,17 +124,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return STOP
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.return_value = JobCommand.STOP
 
             # Mock _handle_stop to raise exception
@@ -163,17 +144,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return START then NONE
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.side_effect = [JobCommand.START, JobCommand.NONE]
 
             # Mock _handle_completion to raise exception
@@ -189,17 +164,11 @@ class TestQueueJobBaseJobLoop:
         job = TestJob("test-job-1", {})
 
         # Mock shared state
-        mock_shared_state = {
-            "status": Mock(),
-            "command": Mock(),
-            "progress": Mock(),
-            "description": Mock(),
-            "result": Mock(),
-        }
+        mock_shared_state = _make_shared_state()
         job._set_shared_state(mock_shared_state)
 
         # Mock get_command to return START then NONE
-        with patch("queuemgr.jobs.base.get_command") as mock_get_command:
+        with patch("queuemgr.jobs.base_core.get_command") as mock_get_command:
             mock_get_command.side_effect = [JobCommand.START, JobCommand.NONE]
 
             # Mock execute to raise exception

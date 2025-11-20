@@ -9,16 +9,14 @@ email: vasilyvz@gmail.com
 """
 
 import json
-import signal
 import time
 from multiprocessing import Process
 from typing import Dict, Any, Optional
 from pathlib import Path
 
-from .queue.job_queue import JobQueue
-from .core.registry import JsonlRegistry
 from .core.exceptions import ProcessControlError
 from .proc_config import ProcManagerConfig
+from .proc_manager_bootstrap import run_proc_manager_process
 
 
 class ProcManager:
@@ -70,7 +68,9 @@ class ProcManager:
 
             # Start manager process
             self._process = Process(
-                target=self._manager_process, args=(self.config,), name="QueueManager"
+                target=run_proc_manager_process,
+                args=(self.config,),
+                name="QueueManager",
             )
             self._process.start()
 
@@ -294,113 +294,3 @@ class ProcManager:
                 self._proc_dir.rmdir()
         except (OSError, IOError):
             pass  # Ignore cleanup errors
-
-    @staticmethod
-    def _manager_process(config: ProcManagerConfig) -> None:
-        """Manager process entry point."""
-        try:
-            # Setup signal handlers
-            signal.signal(signal.SIGTERM, lambda s, f: None)
-            signal.signal(signal.SIGINT, lambda s, f: None)
-
-            # Initialize queue system
-            registry = JsonlRegistry(config.registry_path)
-            queue = JobQueue(
-                registry=registry,
-                max_queue_size=getattr(config, "max_queue_size", None),
-                per_job_type_limits=getattr(config, "per_job_type_limits", None),
-            )
-
-            # Create proc directory
-            proc_dir = Path(config.proc_dir)
-            proc_dir.mkdir(parents=True, exist_ok=True)
-
-            # Create ready file
-            ready_file = proc_dir / "ready"
-            ready_file.touch()
-
-            # Main loop
-            while True:
-                try:
-                    # Check for commands
-                    command_file = proc_dir / "command"
-                    if command_file.exists():
-                        # Read command
-                        with open(command_file, "r") as f:
-                            command_data = json.load(f)
-
-                        # Process command
-                        response = ProcManager._process_command(
-                            queue, command_data["command"], command_data["params"]
-                        )
-
-                        # Write response
-                        response_file = proc_dir / "response"
-                        with open(response_file, "w") as f:
-                            json.dump(response, f)
-
-                        # Clean up command file
-                        command_file.unlink()
-
-                    time.sleep(0.1)
-
-                except (OSError, IOError, ValueError, TimeoutError):
-                    break
-
-        except (OSError, IOError, ValueError, TimeoutError):
-            pass
-
-        finally:
-            # Cleanup
-            try:
-                if proc_dir.exists():
-                    for file in proc_dir.glob("*"):
-                        file.unlink()
-            except (OSError, IOError):
-                pass
-
-    @staticmethod
-    def _process_command(
-        queue: JobQueue, command: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Process a command from the manager."""
-        try:
-            if command == "add_job":
-                # Import job class
-                job_class_name = params["job_class_name"]
-                job_class_module = params["job_class_module"]
-
-                module = __import__(job_class_module, fromlist=[job_class_name])
-                job_class = getattr(module, job_class_name)
-
-                queue.add_job(job_class, params["job_id"], params["params"])
-                return {"status": "success"}
-
-            elif command == "start_job":
-                queue.start_job(params["job_id"])
-                return {"status": "success"}
-
-            elif command == "stop_job":
-                queue.stop_job(params["job_id"])
-                return {"status": "success"}
-
-            elif command == "delete_job":
-                queue.delete_job(params["job_id"])
-                return {"status": "success"}
-
-            elif command == "get_job_status":
-                status = queue.get_job_status(params["job_id"])
-                return {"status": "success", "result": status}
-
-            elif command == "list_jobs":
-                jobs = queue.list_jobs()
-                return {"status": "success", "result": jobs}
-
-            elif command == "shutdown":
-                queue.shutdown()
-                return {"status": "shutdown"}
-
-            else:
-                return {"status": "error", "error": f"Unknown command: {command}"}
-        except (OSError, IOError, ValueError, TimeoutError) as e:
-            return {"status": "error", "error": str(e)}

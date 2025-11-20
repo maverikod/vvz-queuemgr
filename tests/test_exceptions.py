@@ -122,10 +122,11 @@ class TestProcessControlError:
         assert error.job_id == "test-job-123"
         assert error.operation == "stop"
         assert error.original_error == original
-        assert (
-            str(error)
-            == "Process control error for job 'test-job-123' during stop: Process not found"
+        expected = (
+            "Process control error for job 'test-job-123' during stop: "
+            "Process not found"
         )
+        assert str(error) == expected
         assert isinstance(error, QueueManagerError)
 
 

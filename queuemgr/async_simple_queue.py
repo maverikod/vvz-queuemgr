@@ -15,7 +15,6 @@ from contextlib import asynccontextmanager
 
 from .jobs.base import QueueJobBase
 from .core.registry import JsonlRegistry
-from .core.types import JobStatus
 from queuemgr.exceptions import ProcessControlError
 
 
@@ -276,7 +275,6 @@ class AsyncSimpleQueue:
             )
 
         try:
-            job = self._jobs[job_id]
             is_running = (
                 job_id in self._running_jobs and not self._running_jobs[job_id].done()
             )

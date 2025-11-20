@@ -264,3 +264,28 @@ class JsonlRegistry(Registry):
             from .exceptions import RegistryError
 
             raise RegistryError(f"Failed to clear registry: {e}", e)
+
+
+class InMemoryRegistry(Registry):
+    """
+    Lightweight in-memory registry that stores only the latest job snapshots.
+
+    Intended for unit tests and ephemeral queue instances where persistence
+    is not required.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the in-memory storage."""
+        self._latest_records: Dict[JobId, JobRecord] = {}
+
+    def append(self, record: JobRecord) -> None:
+        """Store/overwrite the latest record for the given job."""
+        self._latest_records[record.job_id] = record
+
+    def latest(self, job_id: JobId) -> Optional[JobRecord]:
+        """Return the latest record for a job, if available."""
+        return self._latest_records.get(job_id)
+
+    def all_latest(self) -> Iterable[JobRecord]:
+        """Iterate over the latest records for all jobs."""
+        return list(self._latest_records.values())

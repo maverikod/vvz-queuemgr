@@ -36,7 +36,7 @@ def with_job_lock(shared_state: Dict[str, Any]) -> Generator[None, None, None]:
 
     try:
         lock.acquire()
-        yield
+        yield shared_state
     finally:
         try:
             lock.release()

@@ -25,6 +25,13 @@ class MCPJob(QueueJobBase):
     """Example job for MCP adapter."""
 
     def __init__(self, job_id: str, params: dict):
+        """
+        Initialize MCP job definition.
+
+        Args:
+            job_id: Unique identifier assigned by queue.
+            params: Job configuration including task name and duration seconds.
+        """
         super().__init__(job_id, params)
         self.task_name = params.get("task_name", "default_task")
         self.duration = params.get("duration", 3)
@@ -61,6 +68,7 @@ class QueueCommand(Command):
     """Queue management command for MCP adapter."""
 
     def __init__(self):
+        """Configure metadata for the queue management command."""
         super().__init__()
         self.name = "queue"
         self.description = "Queue management command for job operations"

@@ -20,8 +20,7 @@ from queuemgr.core.ipc import (
     read_job_state,
     set_command,
 )
-from queuemgr.exceptions import ValidationError
-from queuemgr.core.exceptions import ProcessControlError
+from queuemgr.exceptions import ValidationError, ProcessControlError
 
 
 class QueueJobBase(ABC):
@@ -165,8 +164,10 @@ class QueueJobBase(ABC):
                 target=self._job_loop, name=f"Job-{self.job_id}", daemon=True
             )
             self._process.start()
-        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
-            raise ProcessControlError(self.job_id, "start", f"Failed to start job: {e}")
+        except Exception as exc:  # pylint: disable=broad-except
+            raise ProcessControlError(
+                self.job_id, "start", f"Failed to start job: {exc}"
+            ) from exc
 
     def stop_process(self, timeout: Optional[float] = None) -> None:
         """
@@ -182,15 +183,21 @@ class QueueJobBase(ABC):
             return  # Not running, nothing to stop
 
         try:
-            # Send stop command
             if self._shared_state is not None:
                 set_command(self._shared_state, JobCommand.STOP)
 
-            # Wait for process to finish
             if self._process:
                 self._process.join(timeout=timeout)
-        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
-            raise ProcessControlError(self.job_id, "stop", f"Failed to stop job: {e}")
+                if self._process.is_alive():
+                    raise ProcessControlError(
+                        self.job_id,
+                        "stop",
+                        f"Job failed to stop within timeout {timeout}",
+                    )
+        except ProcessControlError:
+            raise
+        except Exception as exc:  # pylint: disable=broad-except
+            raise ProcessControlError(self.job_id, "stop", f"Failed to stop job: {exc}")
 
     def terminate_process(self, force: bool = False) -> None:
         """
@@ -211,10 +218,10 @@ class QueueJobBase(ABC):
                     self._process.kill()
                 else:
                     self._process.terminate()
-        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
+        except Exception as exc:  # pylint: disable=broad-except
             raise ProcessControlError(
-                self.job_id, "terminate", f"Failed to terminate job: {e}"
-            )
+                self.job_id, "terminate", f"Failed to terminate job: {exc}"
+            ) from exc
 
     def _job_loop(self) -> None:
         """Main job execution loop."""
@@ -230,10 +237,16 @@ class QueueJobBase(ABC):
             if self._shared_state is not None:
                 command = get_command(self._shared_state)
                 if command == JobCommand.STOP:
-                    self._handle_stop()
+                    try:
+                        self._handle_stop()
+                    except Exception as stop_error:  # pylint: disable=broad-except
+                        self._handle_error(stop_error)
                     return
                 elif command == JobCommand.DELETE:
-                    self._handle_delete()
+                    try:
+                        self._handle_delete()
+                    except Exception as delete_error:  # pylint: disable=broad-except
+                        self._handle_error(delete_error)
                     return
 
             # Execute the job
@@ -243,17 +256,31 @@ class QueueJobBase(ABC):
             if self._shared_state is not None:
                 command = get_command(self._shared_state)
                 if command == JobCommand.STOP:
-                    self._handle_stop()
+                    try:
+                        self._handle_stop()
+                    except Exception as stop_error:  # pylint: disable=broad-except
+                        self._handle_error(stop_error)
                     return
                 elif command == JobCommand.DELETE:
-                    self._handle_delete()
+                    try:
+                        self._handle_delete()
+                    except Exception as delete_error:  # pylint: disable=broad-except
+                        self._handle_error(delete_error)
                     return
 
             # Handle completion
-            self._handle_completion()
+            try:
+                self._handle_completion()
+            except Exception as completion_error:  # pylint: disable=broad-except
+                self._handle_error(completion_error)
 
-        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
-            self._handle_error(e)
+        except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as exc:
+            self.error = exc
+            try:
+                self._handle_error(exc)
+            except Exception:  # pylint: disable=broad-except
+                # Swallow handler errors to keep shutdown path predictable.
+                pass
 
     def _handle_stop(self) -> None:
         """Handle stop command."""
@@ -297,15 +324,14 @@ class QueueJobBase(ABC):
         """Write job state to registry."""
         if self._registry is not None:
             try:
-                status_data = self.get_status()
-                # Write to registry (implementation depends on registry type)
-                pass
+                self.get_status()
+                # Registry persistence is implemented by concrete registries.
             except (
                 OSError,
                 IOError,
                 ValueError,
                 TimeoutError,
                 ProcessControlError,
-            ) as e:
+            ):
                 # If registry write fails, log but don't crash
                 pass
