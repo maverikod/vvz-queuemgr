@@ -129,7 +129,7 @@ class JsonlRegistry(Registry):
 
     def _serialize_record(self, record: JobRecord) -> Dict[str, Any]:
         """Serialize a JobRecord to a dictionary for JSON storage."""
-        return {
+        result = {
             "job_id": record.job_id,
             "status": record.status.value,
             "progress": record.progress,
@@ -138,9 +138,21 @@ class JsonlRegistry(Registry):
             "created_at": record.created_at.isoformat(),
             "updated_at": record.updated_at.isoformat(),
         }
+        if record.started_at is not None:
+            result["started_at"] = record.started_at.isoformat()
+        if record.completed_at is not None:
+            result["completed_at"] = record.completed_at.isoformat()
+        return result
 
     def _deserialize_record(self, data: Dict[str, Any]) -> JobRecord:
         """Deserialize a dictionary to a JobRecord."""
+        started_at = None
+        if "started_at" in data and data["started_at"] is not None:
+            started_at = datetime.fromisoformat(data["started_at"])
+
+        completed_at = None
+        if "completed_at" in data and data["completed_at"] is not None:
+            completed_at = datetime.fromisoformat(data["completed_at"])
 
         return JobRecord(
             job_id=data["job_id"],
@@ -150,6 +162,8 @@ class JsonlRegistry(Registry):
             result=data["result"],
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
+            started_at=started_at,
+            completed_at=completed_at,
         )
 
     def append(self, record: JobRecord) -> None:

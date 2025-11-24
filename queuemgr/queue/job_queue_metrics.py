@@ -73,20 +73,78 @@ class JobQueueMetricsMixin:
         """
         Remove jobs that finished with COMPLETED or ERROR statuses.
 
+        Jobs are removed only if:
+        1. They have been completed/errored for longer than
+           completed_job_retention_seconds (if configured), OR
+        2. Limits are configured and cleanup is needed for space.
+
+        If completed_job_retention_seconds is None and no limits are set,
+        completed jobs are preserved to allow clients to retrieve results.
+
         Returns:
             Number of jobs removed from the in-memory queue.
         """
+        from datetime import datetime
+
+        retention_seconds = getattr(self, "completed_job_retention_seconds", None)
+        has_limits = False
+        if hasattr(self, "max_queue_size") and self.max_queue_size is not None:
+            has_limits = True
+        if hasattr(self, "per_job_type_limits") and self.per_job_type_limits:
+            has_limits = True
+
+        # If no retention and no limits, preserve completed jobs
+        if retention_seconds is None and not has_limits:
+            return 0
+
+        now = datetime.now()
         jobs_to_remove = []
+
         for job_id, job in self._jobs.items():
             status_data = job.get_status()
-            if status_data["status"] in [JobStatus.COMPLETED, JobStatus.ERROR]:
-                jobs_to_remove.append(job_id)
+            status = status_data["status"]
+
+            if status not in [JobStatus.COMPLETED, JobStatus.ERROR]:
+                continue
+
+            # Check if job should be removed based on retention time
+            completed_at = None
+            if hasattr(self, "_job_completed_times"):
+                completed_at = self._job_completed_times.get(job_id)
+
+            # If completed_at is not set yet, try to get it from job status
+            if completed_at is None:
+                # Job just completed, don't remove it yet
+                continue
+
+            # Check retention time
+            if retention_seconds is not None:
+                time_since_completion = (now - completed_at).total_seconds()
+                if time_since_completion >= retention_seconds:
+                    jobs_to_remove.append(job_id)
+                    continue
+
+            # If limits are set and we need space, remove old completed jobs
+            if has_limits:
+                # Only remove if retention allows
+                # (or if retention is None and we need space)
+                time_since = (now - completed_at).total_seconds()
+                if retention_seconds is None or (
+                    retention_seconds is not None and time_since >= retention_seconds
+                ):
+                    jobs_to_remove.append(job_id)
 
         for job_id in jobs_to_remove:
             del self._jobs[job_id]
             if hasattr(self, "_job_creation_times"):
                 if job_id in self._job_creation_times:
                     del self._job_creation_times[job_id]
+            if hasattr(self, "_job_started_times"):
+                if job_id in self._job_started_times:
+                    del self._job_started_times[job_id]
+            if hasattr(self, "_job_completed_times"):
+                if job_id in self._job_completed_times:
+                    del self._job_completed_times[job_id]
             if hasattr(self, "_job_types") and job_id in self._job_types:
                 del self._job_types[job_id]
 

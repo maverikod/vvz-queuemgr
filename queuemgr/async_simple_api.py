@@ -32,6 +32,7 @@ class AsyncQueueSystem:
         shutdown_timeout: float = 30.0,
         max_queue_size: Optional[int] = None,
         per_job_type_limits: Optional[Dict[str, int]] = None,
+        completed_job_retention_seconds: Optional[float] = None,
     ):
         """
         Initialize the async queue system.
@@ -41,11 +42,14 @@ class AsyncQueueSystem:
             shutdown_timeout: Timeout for graceful shutdown.
             max_queue_size: Global maximum number of jobs (optional).
             per_job_type_limits: Dict mapping job_type to max count (optional).
+            completed_job_retention_seconds: How long to keep completed/error jobs
+                before auto-removal (optional). If None, completed jobs are preserved.
         """
         self.registry_path = registry_path
         self.shutdown_timeout = shutdown_timeout
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits
+        self.completed_job_retention_seconds = completed_job_retention_seconds
         self._manager: Optional[AsyncProcessManager] = None
         self._is_initialized = False
 
@@ -69,6 +73,7 @@ class AsyncQueueSystem:
                 shutdown_timeout=self.shutdown_timeout,
                 max_queue_size=self.max_queue_size,
                 per_job_type_limits=self.per_job_type_limits,
+                completed_job_retention_seconds=self.completed_job_retention_seconds,
             )
             self._manager = AsyncProcessManager(config)
             await self._manager.start()

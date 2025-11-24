@@ -59,6 +59,7 @@ def run_async_process_manager(
             registry,
             max_queue_size=config.max_queue_size,
             per_job_type_limits=config.per_job_type_limits,
+            completed_job_retention_seconds=config.completed_job_retention_seconds,
         )
 
         response_queue.put({"status": "ready"})

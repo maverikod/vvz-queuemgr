@@ -50,6 +50,8 @@ class JobRecord:
         result: Job result data (if any)
         created_at: When the job was created
         updated_at: When this record was created
+        started_at: When the job execution started (None if not started)
+        completed_at: When the job execution completed or failed (None if not completed)
     """
 
     job_id: JobId
@@ -59,6 +61,8 @@ class JobRecord:
     result: Optional[JobResult]
     created_at: datetime
     updated_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     def __post_init__(self) -> None:
         """Validate record data after initialization."""

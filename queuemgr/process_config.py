@@ -21,3 +21,4 @@ class ProcessManagerConfig:
     max_concurrent_jobs: int = 10
     max_queue_size: Optional[int] = None
     per_job_type_limits: Optional[Dict[str, int]] = None
+    completed_job_retention_seconds: Optional[float] = None

@@ -39,6 +39,7 @@ class JobQueue(JobQueueMetricsMixin):
         registry: Optional[Registry] = None,
         max_queue_size: Optional[int] = None,
         per_job_type_limits: Optional[Dict[str, int]] = None,
+        completed_job_retention_seconds: Optional[float] = None,
     ) -> None:
         """
         Initialize the job queue.
@@ -47,6 +48,8 @@ class JobQueue(JobQueueMetricsMixin):
             registry: Registry instance for persisting job states.
             max_queue_size: Global maximum number of jobs (optional).
             per_job_type_limits: Dict mapping job_type to max count (optional).
+            completed_job_retention_seconds: How long to keep completed/error jobs
+                before auto-removal (optional). If None, completed jobs are preserved.
         """
         self.registry = registry or InMemoryRegistry()
         # Backward-compatibility alias expected by tests and legacy code.
@@ -54,9 +57,12 @@ class JobQueue(JobQueueMetricsMixin):
         self._jobs: Dict[JobId, QueueJobBase] = {}
         self._manager = get_manager()
         self._job_creation_times: Dict[JobId, datetime] = {}
+        self._job_started_times: Dict[JobId, datetime] = {}
+        self._job_completed_times: Dict[JobId, datetime] = {}
         self._job_types: Dict[JobId, str] = {}
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits or {}
+        self.completed_job_retention_seconds = completed_job_retention_seconds
 
         # Load existing jobs from registry
         load_jobs_from_registry(
@@ -129,17 +135,35 @@ class JobQueue(JobQueueMetricsMixin):
 
         job = self._jobs[job_id]
         status_data = job.get_status()
+        current_status = status_data["status"]
 
         created_at = self._job_creation_times.get(job_id, datetime.now())
+        started_at = self._job_started_times.get(job_id)
+        completed_at = self._job_completed_times.get(job_id)
+
+        # Update started_at if job is running but not tracked yet
+        if current_status == JobStatus.RUNNING and started_at is None:
+            started_at = datetime.now()
+            self._job_started_times[job_id] = started_at
+
+        # Update completed_at if job is completed/error but not tracked yet
+        if (
+            current_status in [JobStatus.COMPLETED, JobStatus.ERROR]
+            and completed_at is None
+        ):
+            completed_at = datetime.now()
+            self._job_completed_times[job_id] = completed_at
 
         return JobRecord(
             job_id=job_id,
-            status=status_data["status"],
+            status=current_status,
             progress=status_data["progress"],
             description=status_data["description"],
             result=status_data["result"],
             created_at=created_at,
             updated_at=datetime.now(),
+            started_at=started_at,
+            completed_at=completed_at,
         )
 
     def add_job(
@@ -308,6 +332,8 @@ class JobQueue(JobQueueMetricsMixin):
 
             if job._shared_state is not None:
                 set_command(job._shared_state, JobCommand.START)
+                # Record start time
+                self._job_started_times[job_id] = datetime.now()
         except ProcessControlError as e:
             raise ProcessControlError(job_id, "start", e)
 

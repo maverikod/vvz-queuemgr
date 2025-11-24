@@ -16,6 +16,7 @@ from queuemgr.exceptions import (
     ProcessControlError,
 )
 from queuemgr.core.types import JobStatus, JobCommand
+from queuemgr.core.registry import InMemoryRegistry
 
 
 class TestJob(QueueJobBase):
@@ -186,9 +187,49 @@ class TestJobQueueOperations:
 
             mock_stop.assert_called_once_with("test-job-1")
 
-    def test_cleanup_completed_jobs(self):
-        """Test cleaning up completed jobs."""
-        queue = JobQueue()
+    def test_cleanup_completed_jobs(self) -> None:
+        """Test cleaning up completed jobs when limits are set."""
+        from datetime import datetime, timedelta
+
+        registry = InMemoryRegistry()
+        queue = JobQueue(
+            registry, max_queue_size=100, completed_job_retention_seconds=0.0
+        )
+
+        # Add test jobs
+        queue.add_job(TestJob, "test-job-1", {})
+        queue.add_job(TestJob, "test-job-2", {})
+
+        # Mock jobs as completed
+        job1 = queue._jobs["test-job-1"]
+        job1._shared_state = {"status": Mock()}
+        job1._shared_state["status"].value = JobStatus.COMPLETED.value
+
+        job2 = queue._jobs["test-job-2"]
+        job2._shared_state = {"status": Mock()}
+        job2._shared_state["status"].value = JobStatus.ERROR.value
+
+        # Set completed_at to past (so they will be removed)
+        past_time = datetime.now() - timedelta(seconds=10)
+        queue._job_completed_times["test-job-1"] = past_time
+        queue._job_completed_times["test-job-2"] = past_time
+
+        # Mock get_status
+        with patch.object(job1, "get_status") as mock_get_status1:
+            with patch.object(job2, "get_status") as mock_get_status2:
+                mock_get_status1.return_value = {"status": JobStatus.COMPLETED}
+                mock_get_status2.return_value = {"status": JobStatus.ERROR}
+
+                removed_count = queue.cleanup_completed_jobs()
+
+                assert removed_count == 2
+                assert "test-job-1" not in queue._jobs
+                assert "test-job-2" not in queue._jobs
+
+    def test_cleanup_completed_jobs_preserves_when_no_limits(self) -> None:
+        """Test that completed jobs are preserved when no limits are set."""
+        registry = InMemoryRegistry()
+        queue = JobQueue(registry, max_queue_size=None, per_job_type_limits=None)
 
         # Add test jobs
         queue.add_job(TestJob, "test-job-1", {})
@@ -211,9 +252,10 @@ class TestJobQueueOperations:
 
                 removed_count = queue.cleanup_completed_jobs()
 
-                assert removed_count == 2
-                assert "test-job-1" not in queue._jobs
-                assert "test-job-2" not in queue._jobs
+                # Should not remove any jobs when limits are not set
+                assert removed_count == 0
+                assert "test-job-1" in queue._jobs
+                assert "test-job-2" in queue._jobs
 
     def test_shutdown(self):
         """Test queue shutdown."""

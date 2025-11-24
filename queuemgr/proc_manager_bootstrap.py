@@ -40,6 +40,9 @@ def run_proc_manager_process(config: ProcManagerConfig) -> None:
             registry=registry,
             max_queue_size=getattr(config, "max_queue_size", None),
             per_job_type_limits=getattr(config, "per_job_type_limits", None),
+            completed_job_retention_seconds=getattr(
+                config, "completed_job_retention_seconds", None
+            ),
         )
 
         proc_dir.mkdir(parents=True, exist_ok=True)

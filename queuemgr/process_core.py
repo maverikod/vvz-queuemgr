@@ -307,6 +307,7 @@ class ProcessManager:
                 registry,
                 max_queue_size=config.max_queue_size,
                 per_job_type_limits=config.per_job_type_limits,
+                completed_job_retention_seconds=config.completed_job_retention_seconds,
             )
 
             # Signal that we're ready
