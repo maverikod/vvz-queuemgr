@@ -12,7 +12,7 @@ import asyncio
 import logging
 import time
 from multiprocessing import Process, Queue, Event
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from contextlib import asynccontextmanager
 
 from queuemgr.core.exceptions import ProcessControlError
@@ -279,6 +279,26 @@ class AsyncProcessManager:
             raise ProcessControlError("manager", "list_jobs", "Manager is not running")
 
         return await self._send_command_async("list_jobs", {})
+
+    async def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
+        """
+        Get stdout and stderr logs for a job.
+
+        Args:
+            job_id: Job identifier.
+
+        Returns:
+            Dictionary containing stdout and stderr log lines.
+
+        Raises:
+            ProcessControlError: If the manager is not running or command fails.
+        """
+        if not self.is_running():
+            raise ProcessControlError(
+                "manager", "get_job_logs", "Manager is not running"
+            )
+
+        return await self._send_command_async("get_job_logs", {"job_id": job_id})
 
     async def _send_command_async(
         self, command: str, params: Dict[str, Any]

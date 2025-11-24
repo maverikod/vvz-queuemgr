@@ -28,7 +28,7 @@ def create_job_shared_state(manager: Dict[str, Any]) -> Dict[str, Any]:
     Create and return shared variables for a job.
 
     Creates shared state including status, command, progress, description,
-    result, and mutex. All shared variables are thread/process safe and can
+    result, logs, and mutex. All shared variables are thread/process safe and can
     be accessed from multiple processes.
 
     Args:
@@ -41,6 +41,8 @@ def create_job_shared_state(manager: Dict[str, Any]) -> Dict[str, Any]:
         - progress: Shared integer for job progress (0-100)
         - description: Shared string for job description
         - result: Shared value for job result
+        - stdout: Shared list for stdout output lines
+        - stderr: Shared list for stderr output lines
         - lock: Shared mutex for thread safety
     """
     shared_state = {
@@ -49,6 +51,8 @@ def create_job_shared_state(manager: Dict[str, Any]) -> Dict[str, Any]:
         "progress": manager.Value("i", 0),  # 0-100
         "description": manager.Value("c", b""),  # UTF-8 encoded string
         "result": manager.Value("O", None),  # Any Python object
+        "stdout": manager.list(),  # List of stdout lines
+        "stderr": manager.list(),  # List of stderr lines
         "lock": manager.Lock(),  # Mutex for thread safety
     }
     return shared_state

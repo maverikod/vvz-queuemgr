@@ -125,11 +125,29 @@ def process_proc_command(
 
         if command == "get_job_status":
             status = queue.get_job_status(params["job_id"])
-            return {"status": "success", "result": status}
+            # Serialize JobRecord to dict
+            result = {
+                "job_id": status.job_id,
+                "status": status.status.name,
+                "progress": status.progress,
+                "description": status.description,
+                "result": status.result,
+                "created_at": status.created_at.isoformat(),
+                "updated_at": status.updated_at.isoformat(),
+            }
+            if status.started_at is not None:
+                result["started_at"] = status.started_at.isoformat()
+            if status.completed_at is not None:
+                result["completed_at"] = status.completed_at.isoformat()
+            return {"status": "success", "result": result}
 
         if command == "list_jobs":
             jobs = queue.list_jobs()
             return {"status": "success", "result": jobs}
+
+        if command == "get_job_logs":
+            logs = queue.get_job_logs(params["job_id"])
+            return {"status": "success", "result": logs}
 
         if command == "shutdown":
             queue.shutdown()

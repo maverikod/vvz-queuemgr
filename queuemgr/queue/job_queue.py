@@ -52,8 +52,7 @@ class JobQueue(JobQueueMetricsMixin):
                 before auto-removal (optional). If None, completed jobs are preserved.
         """
         self.registry = registry or InMemoryRegistry()
-        # Backward-compatibility alias expected by tests and legacy code.
-        self._registry = self.registry
+        self._registry = self.registry  # Backward-compatibility alias
         self._jobs: Dict[JobId, QueueJobBase] = {}
         self._manager = get_manager()
         self._job_creation_times: Dict[JobId, datetime] = {}
@@ -63,8 +62,6 @@ class JobQueue(JobQueueMetricsMixin):
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits or {}
         self.completed_job_retention_seconds = completed_job_retention_seconds
-
-        # Load existing jobs from registry
         load_jobs_from_registry(
             registry=self.registry,
             jobs=self._jobs,
@@ -91,17 +88,15 @@ class JobQueue(JobQueueMetricsMixin):
             metadata) that can be safely serialized to JSON for IPC responses.
         """
         job_snapshots: List[Dict[str, Any]] = []
-
         for job_id, job in self._jobs.items():
             status_data = job.get_status()
             status_value = status_data.get("status", JobStatus.PENDING)
+            status_text = (
+                status_value.name
+                if isinstance(status_value, JobStatus)
+                else str(status_value)
+            )
             created_at = self._job_creation_times.get(job_id, datetime.now())
-
-            if isinstance(status_value, JobStatus):
-                status_text = status_value.name
-            else:
-                status_text = str(status_value)
-
             job_snapshots.append(
                 {
                     "job_id": job_id,
@@ -114,7 +109,6 @@ class JobQueue(JobQueueMetricsMixin):
                     "updated_at": datetime.now().isoformat(),
                 }
             )
-
         return job_snapshots
 
     def get_job_status(self, job_id: JobId) -> JobRecord:
@@ -404,4 +398,3 @@ class JobQueue(JobQueueMetricsMixin):
         # Clear all jobs
         self._jobs.clear()
         self._job_creation_times.clear()
-        self._job_types.clear()

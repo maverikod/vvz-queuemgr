@@ -221,6 +221,28 @@ class AsyncQueueSystem:
 
         return await self._manager.list_jobs()
 
+    async def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
+        """
+        Get stdout and stderr logs for a job.
+
+        Args:
+            job_id: Job identifier.
+
+        Returns:
+            Dictionary containing:
+            - stdout: List of stdout log lines
+            - stderr: List of stderr log lines
+
+        Raises:
+            ProcessControlError: If the system is not running or command fails.
+        """
+        if not self.is_running():
+            raise ProcessControlError(
+                "system", "get_job_logs", "Queue system is not running"
+            )
+
+        return await self._manager.get_job_logs(job_id)
+
 
 @asynccontextmanager
 async def async_queue_system_context(

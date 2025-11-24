@@ -167,6 +167,7 @@ JobQueueMetricsMixin:
 - cleanup_completed_jobs
 - _get_jobs_by_type
 - _find_oldest_job_id
+- get_job_logs
 JobRecord:
 - __post_init__
 JobRequest: []
@@ -204,6 +205,10 @@ LinuxJob:
 - on_stop
 - on_end
 - on_error
+LogCapture:
+- __init__
+- write
+- flush
 MCPJob:
 - __init__
 - execute
@@ -230,6 +235,7 @@ ProcManager:
 - delete_job
 - get_job_status
 - list_jobs
+- get_job_logs
 - _send_command
 - _wait_for_ready
 - _cleanup
@@ -245,6 +251,7 @@ ProcQueueSystem:
 - delete_job
 - get_job_status
 - list_jobs
+- get_job_logs
 - _ensure_running
 - _cleanup
 - _signal_handler
@@ -489,6 +496,11 @@ TestJobQueueBasic:
 - test_list_job_statuses
 TestJobQueueListJobs:
 - test_list_jobs_returns_serializable_snapshots
+TestJobQueueLogs:
+- test_get_job_logs_empty
+- test_get_job_logs_not_found
+- test_get_job_logs_captures_output
+- test_get_job_logs_after_completion
 TestJobQueueOperations:
 - test_start_job_not_found
 - test_start_job_invalid_state
@@ -501,6 +513,7 @@ TestJobQueueOperations:
 - test_stop_job_failure
 - test_suspend_job
 - test_cleanup_completed_jobs
+- test_cleanup_completed_jobs_preserves_when_no_limits
 - test_shutdown
 - test_shutdown_with_terminate
 TestJobQueuePerTypeLimits:
@@ -559,6 +572,9 @@ TestJsonlRegistry:
 - test_load_existing_records
 - test_malformed_json_lines
 - test_concurrent_access
+TestLogJob:
+- __init__
+- execute
 TestProcessControlError:
 - test_process_control_error_creation
 - test_process_control_error_with_original

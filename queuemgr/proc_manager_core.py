@@ -11,7 +11,7 @@ email: vasilyvz@gmail.com
 import json
 import time
 from multiprocessing import Process
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 from .core.exceptions import ProcessControlError
@@ -240,6 +240,34 @@ class ProcManager:
 
         result = self._send_command("list_jobs", {})
         return result if isinstance(result, list) else []
+
+    def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
+        """
+        Get stdout and stderr logs for a job.
+
+        Args:
+            job_id: Job identifier.
+
+        Returns:
+            Dictionary containing stdout and stderr log lines.
+
+        Raises:
+            ProcessControlError: If operation fails.
+        """
+        if not self.is_running():
+            raise ProcessControlError(
+                "manager", "operation", Exception("Manager is not running")
+            )
+
+        result = self._send_command("get_job_logs", {"job_id": job_id})
+        # _send_command returns the full response dict, extract result
+        if isinstance(result, dict):
+            if "result" in result:
+                return result["result"]
+            # If result is directly the logs dict
+            if "stdout" in result or "stderr" in result:
+                return result
+        return {"stdout": [], "stderr": []}
 
     def _send_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Send a command to the manager process via /proc."""

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 
 from queuemgr.core.types import JobId, JobStatus
 from queuemgr.jobs.base import QueueJobBase
+from queuemgr.exceptions import JobNotFoundError
 
 
 class JobQueueMetricsMixin:
@@ -182,3 +183,34 @@ class JobQueueMetricsMixin:
             job_ids,
             key=lambda jid: self._job_creation_times.get(jid, datetime.now()),
         )
+
+    def get_job_logs(self, job_id: JobId) -> Dict[str, List[str]]:
+        """
+        Get stdout and stderr logs for a job.
+
+        Args:
+            job_id: Job identifier to look up.
+
+        Returns:
+            Dictionary containing:
+            - stdout: List of stdout lines
+            - stderr: List of stderr lines
+
+        Raises:
+            JobNotFoundError: If job is not found.
+        """
+        if job_id not in self._jobs:
+            raise JobNotFoundError(job_id)
+
+        job = self._jobs[job_id]
+        if job._shared_state is None:
+            return {"stdout": [], "stderr": []}
+
+        stdout_logs = job._shared_state.get("stdout")
+        stderr_logs = job._shared_state.get("stderr")
+
+        # Return copies of the lists to avoid race conditions
+        stdout = list(stdout_logs) if stdout_logs is not None else []
+        stderr = list(stderr_logs) if stderr_logs is not None else []
+
+        return {"stdout": stdout, "stderr": stderr}

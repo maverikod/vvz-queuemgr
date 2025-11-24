@@ -64,6 +64,9 @@ class CodeAnalyzer:
 
             # Check file size
             lines = content.split("\n")
+            # Remove trailing empty line if file ends with newline
+            if lines and lines[-1] == "":
+                lines = lines[:-1]
             if len(lines) > self.max_lines:
                 self.issues["files_too_large"].append(
                     {

@@ -8,6 +8,7 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
+import sys
 from abc import ABC, abstractmethod
 from multiprocessing import Process
 from typing import Dict, Any, Optional, Union, List
@@ -21,6 +22,7 @@ from queuemgr.core.ipc import (
     set_command,
 )
 from queuemgr.exceptions import ValidationError, ProcessControlError
+from .log_capture import LogCapture
 
 
 class QueueJobBase(ABC):
@@ -225,7 +227,24 @@ class QueueJobBase(ABC):
 
     def _job_loop(self) -> None:
         """Main job execution loop."""
+        # Capture stdout/stderr if shared state is available
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        stdout_capture: Optional[LogCapture] = None
+        stderr_capture: Optional[LogCapture] = None
+
         try:
+            if self._shared_state is not None:
+                # Set up log capture
+                stdout_logs = self._shared_state.get("stdout")
+                stderr_logs = self._shared_state.get("stderr")
+                if stdout_logs is not None:
+                    stdout_capture = LogCapture(stdout_logs)
+                    sys.stdout = stdout_capture  # type: ignore
+                if stderr_logs is not None:
+                    stderr_capture = LogCapture(stderr_logs)
+                    sys.stderr = stderr_capture  # type: ignore
+
             # Update status to running
             if self._shared_state is not None:
                 update_job_state(self._shared_state, status=JobStatus.RUNNING)
@@ -281,6 +300,14 @@ class QueueJobBase(ABC):
             except Exception:  # pylint: disable=broad-except
                 # Swallow handler errors to keep shutdown path predictable.
                 pass
+        finally:
+            # Restore original stdout/stderr
+            if stdout_capture is not None:
+                stdout_capture.flush()
+                sys.stdout = original_stdout
+            if stderr_capture is not None:
+                stderr_capture.flush()
+                sys.stderr = original_stderr
 
     def _handle_stop(self) -> None:
         """Handle stop command."""

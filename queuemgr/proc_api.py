@@ -177,6 +177,24 @@ class ProcQueueSystem:
         self._ensure_running()
         return self._manager.list_jobs()
 
+    def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
+        """
+        Get stdout and stderr logs for a job.
+
+        Args:
+            job_id: Job identifier.
+
+        Returns:
+            Dictionary containing:
+            - stdout: List of stdout log lines
+            - stderr: List of stderr log lines
+
+        Raises:
+            ProcessControlError: If the system is not running or command fails.
+        """
+        self._ensure_running()
+        return self._manager.get_job_logs(job_id)
+
     def _ensure_running(self) -> None:
         """Ensure the system is running."""
         if not self.is_running():
