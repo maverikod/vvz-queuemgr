@@ -5,11 +5,15 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
+import multiprocessing
+import time
 import pytest
 from unittest.mock import Mock, patch
 
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.exceptions import ProcessControlError
+from queuemgr.core.types import JobStatus
+from queuemgr.core.ipc_manager import create_job_shared_state, get_manager
 
 
 class TestJob(QueueJobBase):
@@ -45,6 +49,16 @@ class TestQueueJobBaseProcessControl:
 
             assert job._process == mock_process
             mock_process.start.assert_called_once()
+            # Verify Process is called with static method and correct args
+            mock_process_class.assert_called_once()
+            call_args = mock_process_class.call_args
+            assert call_args[1]["target"] == QueueJobBase._job_loop_static
+            assert call_args[1]["args"][0] == TestJob  # job_class
+            assert call_args[1]["args"][1] == "test-job-1"  # job_id
+            assert call_args[1]["args"][2] == {}  # params
+            assert call_args[1]["args"][3] is None  # shared_state (not set in test)
+            assert call_args[1]["name"] == "Job-test-job-1"
+            assert call_args[1]["daemon"] is True
 
     def test_start_process_already_running(self):
         """Test starting process when already running."""
@@ -161,3 +175,46 @@ class TestQueueJobBaseProcessControl:
 
         with pytest.raises(ProcessControlError):
             job.terminate_process()
+
+    def test_start_process_spawn_mode(self):
+        """Test process start in spawn mode (CUDA compatibility)."""
+        # Set spawn mode
+        original_method = multiprocessing.get_start_method(allow_none=True)
+        try:
+            multiprocessing.set_start_method("spawn", force=True)
+
+            job = TestJob("test-job-spawn", {"test_param": "test_value"})
+
+            # Set up shared state
+            manager = get_manager()
+            shared_state = create_job_shared_state(manager)
+            job._set_shared_state(shared_state)
+
+            # Start process
+            job.start_process()
+
+            # Wait a bit for process to start
+            time.sleep(0.1)
+
+            # Verify process started
+            assert job.is_running()
+
+            # Wait for process to complete
+            job._process.join(timeout=2.0)
+
+            # Verify process completed
+            assert not job.is_running()
+
+            # Verify job status
+            status = job.get_status()
+            assert status["status"] in [
+                JobStatus.COMPLETED,
+                JobStatus.PENDING,
+            ]  # May be pending if execute() does nothing
+
+        finally:
+            # Restore original start method
+            if original_method:
+                multiprocessing.set_start_method(original_method, force=True)
+            else:
+                multiprocessing.set_start_method("fork", force=True)

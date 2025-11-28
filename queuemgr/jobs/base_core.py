@@ -11,7 +11,7 @@ email: vasilyvz@gmail.com
 import sys
 from abc import ABC, abstractmethod
 from multiprocessing import Process
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, List, Type
 
 from queuemgr.core.registry import JsonlRegistry
 from queuemgr.core.types import JobId, JobStatus, JobCommand
@@ -151,9 +151,56 @@ class QueueJobBase(ABC):
         """
         return self._process is not None and self._process.is_alive()
 
+    @staticmethod
+    def _job_loop_static(
+        job_class: Type["QueueJobBase"],
+        job_id: JobId,
+        params: Dict[str, Any],
+        shared_state: Optional[Dict[str, Any]],
+    ) -> None:
+        """
+        Static wrapper for job loop execution in child process.
+
+        This method is used to properly handle multiprocessing spawn mode,
+        where bound methods cannot be pickled correctly. It reconstructs
+        the job instance in the child process and executes the job loop.
+
+        Args:
+            job_class: The job class to instantiate.
+            job_id: Job identifier.
+            params: Job parameters.
+            shared_state: Shared state dictionary for IPC (optional).
+
+        Raises:
+            ProcessControlError: If job instantiation or execution fails.
+        """
+        try:
+            # Create new job instance in child process
+            job_instance = job_class(job_id, params)
+
+            # Set shared state (registry is not needed in child process)
+            if shared_state is not None:
+                job_instance._set_shared_state(shared_state)
+
+            # Execute job loop
+            job_instance._job_loop()
+        except Exception as exc:  # pylint: disable=broad-except
+            # If shared state is available, try to update error status
+            if shared_state is not None:
+                try:
+                    update_job_state(shared_state, status=JobStatus.ERROR)
+                except Exception:  # pylint: disable=broad-except
+                    pass  # Ignore errors when updating error status
+            raise ProcessControlError(
+                job_id, "execute", f"Failed to execute job: {exc}"
+            ) from exc
+
     def start_process(self) -> None:
         """
         Start the job process.
+
+        Uses a static wrapper method to ensure compatibility with
+        multiprocessing spawn mode, which is required for CUDA compatibility.
 
         Raises:
             ProcessControlError: If the job is already running or start fails.
@@ -162,8 +209,18 @@ class QueueJobBase(ABC):
             raise ProcessControlError(self.job_id, "start", "Job is already running")
 
         try:
+            # Use static method wrapper for spawn mode compatibility
+            # This ensures proper pickling/unpickling in child process
             self._process = Process(
-                target=self._job_loop, name=f"Job-{self.job_id}", daemon=True
+                target=self._job_loop_static,
+                args=(
+                    self.__class__,
+                    self.job_id,
+                    self.params,
+                    self._shared_state,
+                ),
+                name=f"Job-{self.job_id}",
+                daemon=True,
             )
             self._process.start()
         except Exception as exc:  # pylint: disable=broad-except

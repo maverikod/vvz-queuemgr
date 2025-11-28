@@ -1,7 +1,11 @@
 issues:
   any_type_usage: []
   classes_without_docstrings: []
-  files_too_large: []
+  files_too_large:
+  - exceeds_limit: 21
+    file: queuemgr/jobs/base_core.py
+    limit: 400
+    lines: 421
   files_without_docstrings: []
   generic_exception_usage: []
   imports_in_middle: []
@@ -11,7 +15,7 @@ issues:
 summary:
   any_type_usage: 0
   classes_without_docstrings: 0
-  files_too_large: 0
+  files_too_large: 1
   files_without_docstrings: 0
   generic_exception_usage: 0
   imports_in_middle: 0
@@ -19,4 +23,4 @@ summary:
   methods_with_pass: 0
   methods_without_docstrings: 0
   not_implemented_in_non_abstract: 0
-  total_issues: 0
+  total_issues: 1

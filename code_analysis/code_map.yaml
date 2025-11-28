@@ -879,6 +879,7 @@ classes:
     - _set_shared_state
     - get_status
     - is_running
+    - _job_loop_static
     - start_process
     - stop_process
     - terminate_process
@@ -1314,7 +1315,7 @@ classes:
     - QueueJobBase
     docstring: Test job implementation.
     file: tests/jobs/test_base_process_control.py
-    line: 15
+    line: 19
     methods:
     - __init__
     - execute
@@ -1323,7 +1324,7 @@ classes:
     bases: []
     docstring: Test QueueJobBase process control.
     file: tests/jobs/test_base_process_control.py
-    line: 33
+    line: 37
     methods:
     - test_start_process_success
     - test_start_process_already_running
@@ -1336,6 +1337,7 @@ classes:
     - test_terminate_process_success
     - test_terminate_process_force_kill
     - test_terminate_process_failure
+    - test_start_process_spawn_mode
     name: TestQueueJobBaseProcessControl
   tests/queue/test_job_queue_basic.py:TestJob:
     bases:
@@ -3562,14 +3564,14 @@ functions:
     - self
     docstring: Handle job completion.
     file: queuemgr/jobs/base_core.py
-    line: 330
+    line: 387
     name: _handle_completion
   queuemgr/jobs/base_core.py:_handle_delete:
     args:
     - self
     docstring: Handle delete command.
     file: queuemgr/jobs/base_core.py
-    line: 321
+    line: 378
     name: _handle_delete
   queuemgr/jobs/base_core.py:_handle_error:
     args:
@@ -3577,22 +3579,38 @@ functions:
     - exc
     docstring: Handle job error.
     file: queuemgr/jobs/base_core.py
-    line: 339
+    line: 396
     name: _handle_error
   queuemgr/jobs/base_core.py:_handle_stop:
     args:
     - self
     docstring: Handle stop command.
     file: queuemgr/jobs/base_core.py
-    line: 312
+    line: 369
     name: _handle_stop
   queuemgr/jobs/base_core.py:_job_loop:
     args:
     - self
     docstring: Main job execution loop.
     file: queuemgr/jobs/base_core.py
-    line: 228
+    line: 285
     name: _job_loop
+  queuemgr/jobs/base_core.py:_job_loop_static:
+    args:
+    - job_class
+    - job_id
+    - params
+    - shared_state
+    docstring: "Static wrapper for job loop execution in child process.\n\nThis method\
+      \ is used to properly handle multiprocessing spawn mode,\nwhere bound methods\
+      \ cannot be pickled correctly. It reconstructs\nthe job instance in the child\
+      \ process and executes the job loop.\n\nArgs:\n    job_class: The job class\
+      \ to instantiate.\n    job_id: Job identifier.\n    params: Job parameters.\n\
+      \    shared_state: Shared state dictionary for IPC (optional).\n\nRaises:\n\
+      \    ProcessControlError: If job instantiation or execution fails."
+    file: queuemgr/jobs/base_core.py
+    line: 155
+    name: _job_loop_static
   queuemgr/jobs/base_core.py:_set_registry:
     args:
     - self
@@ -3614,7 +3632,7 @@ functions:
     - self
     docstring: Write job state to registry.
     file: queuemgr/jobs/base_core.py
-    line: 350
+    line: 407
     name: _write_to_registry
   queuemgr/jobs/base_core.py:execute:
     args:
@@ -3700,10 +3718,11 @@ functions:
   queuemgr/jobs/base_core.py:start_process:
     args:
     - self
-    docstring: "Start the job process.\n\nRaises:\n    ProcessControlError: If the\
-      \ job is already running or start fails."
+    docstring: "Start the job process.\n\nUses a static wrapper method to ensure compatibility\
+      \ with\nmultiprocessing spawn mode, which is required for CUDA compatibility.\n\
+      \nRaises:\n    ProcessControlError: If the job is already running or start fails."
     file: queuemgr/jobs/base_core.py
-    line: 154
+    line: 198
     name: start_process
   queuemgr/jobs/base_core.py:stop_process:
     args:
@@ -3713,7 +3732,7 @@ functions:
       \ to wait for graceful stop.\n\nRaises:\n    ProcessControlError: If the job\
       \ is not running or stop fails."
     file: queuemgr/jobs/base_core.py
-    line: 174
+    line: 231
     name: stop_process
   queuemgr/jobs/base_core.py:terminate_process:
     args:
@@ -3723,7 +3742,7 @@ functions:
       \ use SIGKILL instead of SIGTERM.\n\nRaises:\n    ProcessControlError: If the\
       \ job is not running or termination fails."
     file: queuemgr/jobs/base_core.py
-    line: 204
+    line: 261
     name: terminate_process
   queuemgr/jobs/exceptions.py:__init__:
     args:
@@ -5208,91 +5227,98 @@ functions:
     docstring: "Initialize TestJob.\n\nArgs:\n    job_id: Unique job identifier.\n\
       \    params: Job parameters."
     file: tests/jobs/test_base_process_control.py
-    line: 18
+    line: 22
     name: __init__
   tests/jobs/test_base_process_control.py:execute:
     args:
     - self
     docstring: Execute the job.
     file: tests/jobs/test_base_process_control.py
-    line: 28
+    line: 32
     name: execute
   tests/jobs/test_base_process_control.py:test_start_process_already_running:
     args:
     - self
     docstring: Test starting process when already running.
     file: tests/jobs/test_base_process_control.py
-    line: 49
+    line: 63
     name: test_start_process_already_running
   tests/jobs/test_base_process_control.py:test_start_process_failure:
     args:
     - self
     docstring: Test process start failure.
     file: tests/jobs/test_base_process_control.py
-    line: 61
+    line: 75
     name: test_start_process_failure
+  tests/jobs/test_base_process_control.py:test_start_process_spawn_mode:
+    args:
+    - self
+    docstring: Test process start in spawn mode (CUDA compatibility).
+    file: tests/jobs/test_base_process_control.py
+    line: 179
+    name: test_start_process_spawn_mode
   tests/jobs/test_base_process_control.py:test_start_process_success:
     args:
     - self
     docstring: Test successful process start.
     file: tests/jobs/test_base_process_control.py
-    line: 36
+    line: 40
     name: test_start_process_success
   tests/jobs/test_base_process_control.py:test_stop_process_not_running:
     args:
     - self
     docstring: Test stopping process when not running.
     file: tests/jobs/test_base_process_control.py
-    line: 73
+    line: 87
     name: test_stop_process_not_running
   tests/jobs/test_base_process_control.py:test_stop_process_success:
     args:
     - self
     docstring: Test successful process stop.
     file: tests/jobs/test_base_process_control.py
-    line: 80
+    line: 94
     name: test_stop_process_success
   tests/jobs/test_base_process_control.py:test_stop_process_timeout_exceeded:
     args:
     - self
     docstring: Test process stop when timeout exceeded.
     file: tests/jobs/test_base_process_control.py
-    line: 106
+    line: 120
     name: test_stop_process_timeout_exceeded
   tests/jobs/test_base_process_control.py:test_stop_process_with_timeout:
     args:
     - self
     docstring: Test process stop with timeout.
     file: tests/jobs/test_base_process_control.py
-    line: 93
+    line: 107
     name: test_stop_process_with_timeout
   tests/jobs/test_base_process_control.py:test_terminate_process_failure:
     args:
     - self
     docstring: Test process termination failure.
     file: tests/jobs/test_base_process_control.py
-    line: 152
+    line: 166
     name: test_terminate_process_failure
   tests/jobs/test_base_process_control.py:test_terminate_process_force_kill:
     args:
     - self
     docstring: Test force killing process.
     file: tests/jobs/test_base_process_control.py
-    line: 139
+    line: 153
     name: test_terminate_process_force_kill
   tests/jobs/test_base_process_control.py:test_terminate_process_not_running:
     args:
     - self
     docstring: Test terminating process when not running.
     file: tests/jobs/test_base_process_control.py
-    line: 119
+    line: 133
     name: test_terminate_process_not_running
   tests/jobs/test_base_process_control.py:test_terminate_process_success:
     args:
     - self
     docstring: Test successful process termination.
     file: tests/jobs/test_base_process_control.py
-    line: 126
+    line: 140
     name: test_terminate_process_success
   tests/queue/test_job_queue_basic.py:__init__:
     args:
@@ -8125,6 +8151,12 @@ imports:
     module: queuemgr.exceptions
     name: ProcessControlError
     type: import_from
+  queuemgr/jobs/base_core.py:Type:
+    file: queuemgr/jobs/base_core.py
+    line: 14
+    module: typing
+    name: Type
+    type: import_from
   queuemgr/jobs/base_core.py:Union:
     file: queuemgr/jobs/base_core.py
     line: 14
@@ -9265,34 +9297,62 @@ imports:
     module: unittest.mock
     name: patch
     type: import_from
+  tests/jobs/test_base_process_control.py:JobStatus:
+    file: tests/jobs/test_base_process_control.py
+    line: 15
+    module: queuemgr.core.types
+    name: JobStatus
+    type: import_from
   tests/jobs/test_base_process_control.py:Mock:
     file: tests/jobs/test_base_process_control.py
-    line: 9
+    line: 11
     module: unittest.mock
     name: Mock
     type: import_from
   tests/jobs/test_base_process_control.py:ProcessControlError:
     file: tests/jobs/test_base_process_control.py
-    line: 12
+    line: 14
     module: queuemgr.exceptions
     name: ProcessControlError
     type: import_from
   tests/jobs/test_base_process_control.py:QueueJobBase:
     file: tests/jobs/test_base_process_control.py
-    line: 11
+    line: 13
     module: queuemgr.jobs.base
     name: QueueJobBase
     type: import_from
+  tests/jobs/test_base_process_control.py:create_job_shared_state:
+    file: tests/jobs/test_base_process_control.py
+    line: 16
+    module: queuemgr.core.ipc_manager
+    name: create_job_shared_state
+    type: import_from
+  tests/jobs/test_base_process_control.py:get_manager:
+    file: tests/jobs/test_base_process_control.py
+    line: 16
+    module: queuemgr.core.ipc_manager
+    name: get_manager
+    type: import_from
+  tests/jobs/test_base_process_control.py:multiprocessing:
+    file: tests/jobs/test_base_process_control.py
+    line: 8
+    name: multiprocessing
+    type: import
   tests/jobs/test_base_process_control.py:patch:
     file: tests/jobs/test_base_process_control.py
-    line: 9
+    line: 11
     module: unittest.mock
     name: patch
     type: import_from
   tests/jobs/test_base_process_control.py:pytest:
     file: tests/jobs/test_base_process_control.py
-    line: 8
+    line: 10
     name: pytest
+    type: import
+  tests/jobs/test_base_process_control.py:time:
+    file: tests/jobs/test_base_process_control.py
+    line: 9
+    name: time
     type: import
   tests/queue/test_job_queue.py:TestJobQueueBasic:
     file: tests/queue/test_job_queue.py

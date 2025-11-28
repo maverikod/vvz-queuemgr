@@ -307,6 +307,7 @@ QueueJobBase:
 - _set_shared_state
 - get_status
 - is_running
+- _job_loop_static
 - start_process
 - stop_process
 - terminate_process
@@ -607,6 +608,7 @@ TestQueueJobBaseProcessControl:
 - test_terminate_process_success
 - test_terminate_process_force_kill
 - test_terminate_process_failure
+- test_start_process_spawn_mode
 TestQueueManagerError:
 - test_base_error_creation
 TestRegistryError:
