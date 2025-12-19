@@ -626,6 +626,12 @@ ValidationError:
 WebJob:
 - __init__
 - run
+_DummyQueue:
+- __init__
+- put
+_FastResponseManager: []
 _QueueCommandBase:
 - __init__
 - _get_queue
+_SlowResponseManager:
+- __init__

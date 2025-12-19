@@ -245,7 +245,7 @@ class ProcessManager:
         try:
             if self._control_queue and self._response_queue:
                 self._control_queue.put({"command": command, "params": params})
-                response = self._response_queue.get(timeout=30.0)
+                response = self._response_queue.get(timeout=self.config.command_timeout)
             else:
                 raise ProcessControlError("manager", command, "Queues not initialized")
 

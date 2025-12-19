@@ -141,10 +141,8 @@ class JobQueue(JobQueueMetricsMixin):
             self._job_started_times[job_id] = started_at
 
         # Update completed_at if job is completed/error but not tracked yet
-        if (
-            current_status in [JobStatus.COMPLETED, JobStatus.ERROR]
-            and completed_at is None
-        ):
+        is_completed = current_status in [JobStatus.COMPLETED, JobStatus.ERROR]
+        if is_completed and completed_at is None:
             completed_at = datetime.now()
             self._job_completed_times[job_id] = completed_at
 

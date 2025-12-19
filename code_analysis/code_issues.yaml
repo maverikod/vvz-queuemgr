@@ -2,25 +2,51 @@ issues:
   any_type_usage: []
   classes_without_docstrings: []
   files_too_large:
-  - exceeds_limit: 21
+  - exceeds_limit: 6
+    file: queuemgr/async_simple_api.py
+    limit: 400
+    lines: 406
+  - exceeds_limit: 18
+    file: queuemgr/async_process_manager.py
+    limit: 400
+    lines: 418
+  - exceeds_limit: 22
     file: queuemgr/jobs/base_core.py
     limit: 400
-    lines: 421
+    lines: 422
   files_without_docstrings: []
   generic_exception_usage: []
   imports_in_middle: []
+  invalid_imports: []
   methods_with_pass: []
-  methods_without_docstrings: []
+  methods_without_docstrings:
+  - class: _DummyQueue
+    file: tests/test_async_process_manager.py
+    line: 24
+    method: __init__
+  - class: _SlowResponseManager
+    file: tests/test_async_process_manager.py
+    line: 42
+    method: __init__
+  - class: null
+    file: tests/test_async_process_manager.py
+    line: 24
+    method: __init__
+  - class: null
+    file: tests/test_async_process_manager.py
+    line: 42
+    method: __init__
   not_implemented_in_non_abstract: []
 summary:
   any_type_usage: 0
   classes_without_docstrings: 0
-  files_too_large: 1
+  files_too_large: 3
   files_without_docstrings: 0
   generic_exception_usage: 0
   imports_in_middle: 0
+  invalid_imports: 0
   max_lines_limit: 400
   methods_with_pass: 0
-  methods_without_docstrings: 0
+  methods_without_docstrings: 4
   not_implemented_in_non_abstract: 0
-  total_issues: 1
+  total_issues: 7

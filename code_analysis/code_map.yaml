@@ -76,7 +76,7 @@ classes:
 
       manager and handles cleanup, designed to work with asyncio applications.'
     file: queuemgr/async_simple_api.py
-    line: 21
+    line: 25
     methods:
     - __init__
     - is_running
@@ -1014,7 +1014,7 @@ classes:
     name: ProcManager
   queuemgr/process_config.py:ProcessManagerConfig:
     bases: []
-    docstring: Configuration for ProcessManager.
+    docstring: Configuration for ProcessManager and related manager processes.
     file: queuemgr/process_config.py
     line: 15
     methods: []
@@ -1538,6 +1538,32 @@ classes:
     - test_add_job_after_loading_from_registry
     - test_get_job_status_for_loaded_job
     name: TestJobQueueRegistryLoading
+  tests/test_async_process_manager.py:_DummyQueue:
+    bases: []
+    docstring: Minimal queue stub exposing ``put`` used by AsyncProcessManager.
+    file: tests/test_async_process_manager.py
+    line: 21
+    methods:
+    - __init__
+    - put
+    name: _DummyQueue
+  tests/test_async_process_manager.py:_FastResponseManager:
+    bases:
+    - AsyncProcessManager
+    docstring: Manager subclass that immediately returns a successful result.
+    file: tests/test_async_process_manager.py
+    line: 32
+    methods: []
+    name: _FastResponseManager
+  tests/test_async_process_manager.py:_SlowResponseManager:
+    bases:
+    - AsyncProcessManager
+    docstring: Manager subclass that delays responses to exercise timeout handling.
+    file: tests/test_async_process_manager.py
+    line: 39
+    methods:
+    - __init__
+    name: _SlowResponseManager
   tests/test_exceptions.py:TestExceptionHierarchy:
     bases: []
     docstring: Test exception hierarchy.
@@ -1886,7 +1912,7 @@ functions:
     args: []
     docstring: Put the serialized command into the control queue.
     file: queuemgr/async_process_manager.py
-    line: 314
+    line: 339
     name: send_command
   queuemgr/async_process_runner.py:_execute_command:
     args:
@@ -1928,20 +1954,23 @@ functions:
     - max_queue_size
     - per_job_type_limits
     - completed_job_retention_seconds
+    - command_timeout
     docstring: "Initialize the async queue system.\n\nArgs:\n    registry_path: Path\
       \ to the registry file.\n    shutdown_timeout: Timeout for graceful shutdown.\n\
       \    max_queue_size: Global maximum number of jobs (optional).\n    per_job_type_limits:\
       \ Dict mapping job_type to max count (optional).\n    completed_job_retention_seconds:\
       \ How long to keep completed/error jobs\n        before auto-removal (optional).\
-      \ If None, completed jobs are preserved."
+      \ If None, completed jobs are preserved.\n    command_timeout: Maximum time\
+      \ to wait for a manager control command\n        response. This timeout applies\
+      \ only to IPC control operations and\n        does not limit job execution time."
     file: queuemgr/async_simple_api.py
-    line: 29
+    line: 33
     name: __init__
   queuemgr/async_simple_api.py:_setup_async_cleanup:
     args: []
     docstring: Setup async cleanup handlers.
     file: queuemgr/async_simple_api.py
-    line: 331
+    line: 386
     name: _setup_async_cleanup
   queuemgr/async_simple_api.py:is_running:
     args:
@@ -1949,7 +1978,7 @@ functions:
     docstring: "Check if the queue system is running.\n\nReturns:\n    True if the\
       \ system is running, False otherwise."
     file: queuemgr/async_simple_api.py
-    line: 101
+    line: 111
     name: is_running
   queuemgr/async_simple_queue.py:__init__:
     args:
@@ -4381,7 +4410,7 @@ functions:
       \ constructor when a class is provided.\n\nReturns:\n    Job ID of the added\
       \ job.\n\nRaises:\n    JobAlreadyExistsError: If job with same ID already exists."
     file: queuemgr/queue/job_queue.py
-    line: 163
+    line: 161
     name: add_job
   queuemgr/queue/job_queue.py:delete_job:
     args:
@@ -4393,14 +4422,14 @@ functions:
       \ terminate running job.\n\nRaises:\n    JobNotFoundError: If job is not found.\n\
       \    ProcessControlError: If process control fails."
     file: queuemgr/queue/job_queue.py
-    line: 248
+    line: 246
     name: delete_job
   queuemgr/queue/job_queue.py:delete_job_callback:
     args:
     - target_job_id
     docstring: Internal helper to delete jobs during eviction.
     file: queuemgr/queue/job_queue.py
-    line: 201
+    line: 199
     name: delete_job_callback
   queuemgr/queue/job_queue.py:get_job_status:
     args:
@@ -4437,7 +4466,7 @@ functions:
       \ Maximum time to wait for jobs to stop gracefully.\n\nRaises:\n    ProcessControlError:\
       \ If some jobs fail to stop."
     file: queuemgr/queue/job_queue.py
-    line: 373
+    line: 371
     name: shutdown
   queuemgr/queue/job_queue.py:start_job:
     args:
@@ -4448,7 +4477,7 @@ functions:
       \    InvalidJobStateError: If job is not in a startable state.\n    ProcessControlError:\
       \ If process creation fails."
     file: queuemgr/queue/job_queue.py
-    line: 298
+    line: 296
     name: start_job
   queuemgr/queue/job_queue.py:stop_job:
     args:
@@ -4460,7 +4489,7 @@ functions:
       \ (seconds).\n\nRaises:\n    JobNotFoundError: If job is not found.\n    ProcessControlError:\
       \ If stop fails."
     file: queuemgr/queue/job_queue.py
-    line: 334
+    line: 332
     name: stop_job
   queuemgr/queue/job_queue.py:suspend_job:
     args:
@@ -4470,7 +4499,7 @@ functions:
       \ to stopping the job.\n\nArgs:\n    job_id: Job identifier to suspend.\n\n\
       Raises:\n    JobNotFoundError: If job is not found."
     file: queuemgr/queue/job_queue.py
-    line: 359
+    line: 357
     name: suspend_job
   queuemgr/queue/job_queue_limits.py:_find_oldest_job_id:
     args:
@@ -5832,6 +5861,47 @@ functions:
     file: tests/queue/test_job_queue_registry_loading.py
     line: 161
     name: test_loaded_jobs_are_placeholder
+  tests/test_async_process_manager.py:__init__:
+    args:
+    - self
+    - config
+    - delay
+    docstring: null
+    file: tests/test_async_process_manager.py
+    line: 42
+    name: __init__
+  tests/test_async_process_manager.py:_prepare_manager:
+    args:
+    - manager
+    docstring: 'Prepare a manager instance for direct _send_command_async testing.
+
+
+      The test helpers avoid spawning subprocesses by injecting dummy queues
+
+      and marking the manager as running.'
+    file: tests/test_async_process_manager.py
+    line: 51
+    name: _prepare_manager
+  tests/test_async_process_manager.py:put:
+    args:
+    - self
+    - value
+    docstring: Store last value for inspection in tests.
+    file: tests/test_async_process_manager.py
+    line: 27
+    name: put
+  tests/test_async_process_manager.py:test_send_command_uses_config_command_timeout:
+    args: []
+    docstring: Ensure _send_command_async uses the configured command_timeout by default.
+    file: tests/test_async_process_manager.py
+    line: 64
+    name: test_send_command_uses_config_command_timeout
+  tests/test_async_process_manager.py:test_send_command_uses_per_call_timeout_override:
+    args: []
+    docstring: Ensure per-call timeout parameter overrides the default command_timeout.
+    file: tests/test_async_process_manager.py
+    line: 80
+    name: test_send_command_uses_per_call_timeout_override
   tests/test_exceptions.py:test_base_error_creation:
     args:
     - self
@@ -6391,61 +6461,61 @@ imports:
     type: import
   queuemgr/async_simple_api.py:Any:
     file: queuemgr/async_simple_api.py
-    line: 13
+    line: 14
     module: typing
     name: Any
     type: import_from
   queuemgr/async_simple_api.py:AsyncProcessManager:
     file: queuemgr/async_simple_api.py
-    line: 16
+    line: 17
     module: async_process_manager
     name: AsyncProcessManager
     type: import_from
   queuemgr/async_simple_api.py:Dict:
     file: queuemgr/async_simple_api.py
-    line: 13
+    line: 14
     module: typing
     name: Dict
     type: import_from
   queuemgr/async_simple_api.py:List:
     file: queuemgr/async_simple_api.py
-    line: 13
+    line: 14
     module: typing
     name: List
     type: import_from
   queuemgr/async_simple_api.py:Optional:
     file: queuemgr/async_simple_api.py
-    line: 13
+    line: 14
     module: typing
     name: Optional
     type: import_from
   queuemgr/async_simple_api.py:ProcessControlError:
     file: queuemgr/async_simple_api.py
-    line: 18
+    line: 19
     module: queuemgr.exceptions
     name: ProcessControlError
     type: import_from
   queuemgr/async_simple_api.py:ProcessManagerConfig:
     file: queuemgr/async_simple_api.py
-    line: 69
+    line: 78
     module: process_config
     name: ProcessManagerConfig
     type: import_from
   queuemgr/async_simple_api.py:QueueJobBase:
     file: queuemgr/async_simple_api.py
-    line: 17
+    line: 18
     module: jobs.base
     name: QueueJobBase
     type: import_from
   queuemgr/async_simple_api.py:Type:
     file: queuemgr/async_simple_api.py
-    line: 13
+    line: 14
     module: typing
     name: Type
     type: import_from
   queuemgr/async_simple_api.py:asynccontextmanager:
     file: queuemgr/async_simple_api.py
-    line: 14
+    line: 15
     module: contextlib
     name: asynccontextmanager
     type: import_from
@@ -6454,9 +6524,14 @@ imports:
     line: 11
     name: asyncio
     type: import
-  queuemgr/async_simple_api.py:signal:
+  queuemgr/async_simple_api.py:logging:
     file: queuemgr/async_simple_api.py
     line: 12
+    name: logging
+    type: import
+  queuemgr/async_simple_api.py:signal:
+    file: queuemgr/async_simple_api.py
+    line: 13
     name: signal
     type: import
   queuemgr/async_simple_queue.py:Any:
@@ -9734,6 +9809,57 @@ imports:
     file: tests/queue/test_job_queue_registry_loading.py
     line: 9
     name: tempfile
+    type: import
+  tests/test_async_process_manager.py:Any:
+    file: tests/test_async_process_manager.py
+    line: 12
+    module: typing
+    name: Any
+    type: import_from
+  tests/test_async_process_manager.py:AsyncProcessManager:
+    file: tests/test_async_process_manager.py
+    line: 16
+    module: queuemgr.async_process_manager
+    name: AsyncProcessManager
+    type: import_from
+  tests/test_async_process_manager.py:Dict:
+    file: tests/test_async_process_manager.py
+    line: 12
+    module: typing
+    name: Dict
+    type: import_from
+  tests/test_async_process_manager.py:ProcessControlError:
+    file: tests/test_async_process_manager.py
+    line: 17
+    module: queuemgr.core.exceptions
+    name: ProcessControlError
+    type: import_from
+  tests/test_async_process_manager.py:ProcessManagerConfig:
+    file: tests/test_async_process_manager.py
+    line: 18
+    module: queuemgr.process_config
+    name: ProcessManagerConfig
+    type: import_from
+  tests/test_async_process_manager.py:annotations:
+    file: tests/test_async_process_manager.py
+    line: 8
+    module: __future__
+    name: annotations
+    type: import_from
+  tests/test_async_process_manager.py:asyncio:
+    file: tests/test_async_process_manager.py
+    line: 10
+    name: asyncio
+    type: import
+  tests/test_async_process_manager.py:pytest:
+    file: tests/test_async_process_manager.py
+    line: 14
+    name: pytest
+    type: import
+  tests/test_async_process_manager.py:time:
+    file: tests/test_async_process_manager.py
+    line: 11
+    name: time
     type: import
   tests/test_exceptions.py:InvalidJobStateError:
     file: tests/test_exceptions.py

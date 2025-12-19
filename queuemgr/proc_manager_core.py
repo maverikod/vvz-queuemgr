@@ -279,7 +279,7 @@ class ProcManager:
 
             # Wait for response
             response_file = self._proc_dir / "response"
-            timeout = 30.0
+            timeout = self.config.command_timeout
             start_time = time.time()
 
             while not response_file.exists():

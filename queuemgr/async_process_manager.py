@@ -179,7 +179,11 @@ class AsyncProcessManager:
         )
 
     async def add_job(
-        self, job_class: type, job_id: str, params: Dict[str, Any]
+        self,
+        job_class: type,
+        job_id: str,
+        params: Dict[str, Any],
+        timeout: Optional[float] = None,
     ) -> None:
         """
         Add a job to the queue.
@@ -196,10 +200,12 @@ class AsyncProcessManager:
             raise ProcessControlError("manager", "add_job", "Manager is not running")
 
         await self._send_command_async(
-            "add_job", {"job_class": job_class, "job_id": job_id, "params": params}
+            "add_job",
+            {"job_class": job_class, "job_id": job_id, "params": params},
+            timeout=timeout,
         )
 
-    async def start_job(self, job_id: str) -> None:
+    async def start_job(self, job_id: str, timeout: Optional[float] = None) -> None:
         """
         Start a job.
 
@@ -212,9 +218,9 @@ class AsyncProcessManager:
         if not self.is_running():
             raise ProcessControlError("manager", "start_job", "Manager is not running")
 
-        await self._send_command_async("start_job", {"job_id": job_id})
+        await self._send_command_async("start_job", {"job_id": job_id}, timeout=timeout)
 
-    async def stop_job(self, job_id: str) -> None:
+    async def stop_job(self, job_id: str, timeout: Optional[float] = None) -> None:
         """
         Stop a job.
 
@@ -227,9 +233,11 @@ class AsyncProcessManager:
         if not self.is_running():
             raise ProcessControlError("manager", "stop_job", "Manager is not running")
 
-        await self._send_command_async("stop_job", {"job_id": job_id})
+        await self._send_command_async("stop_job", {"job_id": job_id}, timeout=timeout)
 
-    async def delete_job(self, job_id: str, force: bool = False) -> None:
+    async def delete_job(
+        self, job_id: str, force: bool = False, timeout: Optional[float] = None
+    ) -> None:
         """
         Delete a job.
 
@@ -243,9 +251,13 @@ class AsyncProcessManager:
         if not self.is_running():
             raise ProcessControlError("manager", "delete_job", "Manager is not running")
 
-        await self._send_command_async("delete_job", {"job_id": job_id, "force": force})
+        await self._send_command_async(
+            "delete_job", {"job_id": job_id, "force": force}, timeout=timeout
+        )
 
-    async def get_job_status(self, job_id: str) -> Dict[str, Any]:
+    async def get_job_status(
+        self, job_id: str, timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
         """
         Get job status.
 
@@ -263,9 +275,11 @@ class AsyncProcessManager:
                 "manager", "get_job_status", "Manager is not running"
             )
 
-        return await self._send_command_async("get_job_status", {"job_id": job_id})
+        return await self._send_command_async(
+            "get_job_status", {"job_id": job_id}, timeout=timeout
+        )
 
-    async def list_jobs(self) -> list:
+    async def list_jobs(self, timeout: Optional[float] = None) -> list:
         """
         List all jobs.
 
@@ -278,9 +292,11 @@ class AsyncProcessManager:
         if not self.is_running():
             raise ProcessControlError("manager", "list_jobs", "Manager is not running")
 
-        return await self._send_command_async("list_jobs", {})
+        return await self._send_command_async("list_jobs", {}, timeout=timeout)
 
-    async def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
+    async def get_job_logs(
+        self, job_id: str, timeout: Optional[float] = None
+    ) -> Dict[str, List[str]]:
         """
         Get stdout and stderr logs for a job.
 
@@ -298,20 +314,29 @@ class AsyncProcessManager:
                 "manager", "get_job_logs", "Manager is not running"
             )
 
-        return await self._send_command_async("get_job_logs", {"job_id": job_id})
+        return await self._send_command_async(
+            "get_job_logs", {"job_id": job_id}, timeout=timeout
+        )
 
     async def _send_command_async(
-        self, command: str, params: Dict[str, Any]
+        self, command: str, params: Dict[str, Any], timeout: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Send a command to the manager process and wait for response asynchronously.
+
+        The timeout applies to the control-plane round trip only and does not
+        limit the execution time of individual jobs.
         """
+        effective_timeout = (
+            timeout if timeout is not None else self.config.command_timeout
+        )
+
         try:
             if self._control_queue and self._response_queue:
-                # Send command in executor to avoid blocking
+                # Send command in executor to avoid blocking the event loop.
                 loop = asyncio.get_event_loop()
 
-                def send_command():
+                def send_command() -> None:
                     """Put the serialized command into the control queue."""
                     self._control_queue.put({"command": command, "params": params})
 
@@ -320,17 +345,17 @@ class AsyncProcessManager:
                 # Get response with timeout
                 try:
                     response = await asyncio.wait_for(
-                        self._get_response_async(), timeout=30.0
+                        self._get_response_async(), timeout=effective_timeout
                     )
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError as exc:
                     logger.warning(
                         "Async manager command '%s' timed out after %.1fs",
                         command,
-                        30.0,
+                        effective_timeout,
                     )
                     raise ProcessControlError(
                         "manager", command, "Command timed out waiting for response"
-                    )
+                    ) from exc
             else:
                 raise ProcessControlError("manager", command, "Queues not initialized")
 
@@ -345,24 +370,25 @@ class AsyncProcessManager:
 
             return response.get("result")
 
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as exc:
             logger.warning(
                 "Async manager command '%s' exceeded response timeout", command
             )
             raise ProcessControlError(
                 "manager", command, "Command timed out waiting for response"
-            )
-        except Exception as e:
+            ) from exc
+        except Exception as exc:  # pylint: disable=broad-except
             logger.error(
-                "Async manager command '%s' failed unexpectedly: %s", command, e
+                "Async manager command '%s' failed unexpectedly: %s", command, exc
             )
-            raise ProcessControlError("manager", command, f"Command failed: {e}")
+            raise ProcessControlError("manager", command, f"Command failed: {exc}")
 
 
 @asynccontextmanager
 async def async_queue_system(
     registry_path: str = "queuemgr_registry.jsonl",
     shutdown_timeout: float = 30.0,
+    command_timeout: float = 30.0,
 ):
     """
     AsyncIO-compatible context manager for the queue system.
@@ -370,12 +396,17 @@ async def async_queue_system(
     Args:
         registry_path: Path to the registry file.
         shutdown_timeout: Timeout for graceful shutdown.
+        command_timeout: Maximum time to wait for a manager control command
+            response. This timeout applies only to IPC control operations and
+            does not limit job execution time.
 
     Yields:
         AsyncProcessManager: The async process manager instance.
     """
     config = ProcessManagerConfig(
-        registry_path=registry_path, shutdown_timeout=shutdown_timeout
+        registry_path=registry_path,
+        shutdown_timeout=shutdown_timeout,
+        command_timeout=command_timeout,
     )
     manager = AsyncProcessManager(config)
 

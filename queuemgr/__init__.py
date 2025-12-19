@@ -10,7 +10,7 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
-__version__ = "1.0.12"
+__version__ = "1.0.13"
 __author__ = "Vasiliy Zdanovskiy"
 __email__ = "vasilyvz@gmail.com"
 

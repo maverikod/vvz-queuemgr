@@ -9,6 +9,7 @@ email: vasilyvz@gmail.com
 """
 
 import asyncio
+import logging
 import signal
 from typing import Dict, Any, Optional, Type, List
 from contextlib import asynccontextmanager
@@ -16,6 +17,9 @@ from contextlib import asynccontextmanager
 from .async_process_manager import AsyncProcessManager
 from .jobs.base import QueueJobBase
 from queuemgr.exceptions import ProcessControlError
+
+
+logger = logging.getLogger("queuemgr.async_simple_api")
 
 
 class AsyncQueueSystem:
@@ -33,6 +37,7 @@ class AsyncQueueSystem:
         max_queue_size: Optional[int] = None,
         per_job_type_limits: Optional[Dict[str, int]] = None,
         completed_job_retention_seconds: Optional[float] = None,
+        command_timeout: float = 30.0,
     ):
         """
         Initialize the async queue system.
@@ -44,12 +49,16 @@ class AsyncQueueSystem:
             per_job_type_limits: Dict mapping job_type to max count (optional).
             completed_job_retention_seconds: How long to keep completed/error jobs
                 before auto-removal (optional). If None, completed jobs are preserved.
+            command_timeout: Maximum time to wait for a manager control command
+                response. This timeout applies only to IPC control operations and
+                does not limit job execution time.
         """
         self.registry_path = registry_path
         self.shutdown_timeout = shutdown_timeout
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits
         self.completed_job_retention_seconds = completed_job_retention_seconds
+        self.command_timeout = command_timeout
         self._manager: Optional[AsyncProcessManager] = None
         self._is_initialized = False
 
@@ -74,6 +83,7 @@ class AsyncQueueSystem:
                 max_queue_size=self.max_queue_size,
                 per_job_type_limits=self.per_job_type_limits,
                 completed_job_retention_seconds=self.completed_job_retention_seconds,
+                command_timeout=self.command_timeout,
             )
             self._manager = AsyncProcessManager(config)
             await self._manager.start()
@@ -112,7 +122,11 @@ class AsyncQueueSystem:
         return self._manager.is_running()
 
     async def add_job(
-        self, job_class: Type[QueueJobBase], job_id: str, params: Dict[str, Any]
+        self,
+        job_class: Type[QueueJobBase],
+        job_id: str,
+        params: Dict[str, Any],
+        timeout: Optional[float] = None,
     ) -> None:
         """
         Add a job to the queue.
@@ -121,6 +135,7 @@ class AsyncQueueSystem:
             job_class: Job class to instantiate.
             job_id: Unique job identifier.
             params: Job parameters.
+            timeout: Optional override for the control-plane timeout (seconds).
 
         Raises:
             ProcessControlError: If the system is not running or command fails.
@@ -130,14 +145,15 @@ class AsyncQueueSystem:
                 "system", "add_job", "Queue system is not running"
             )
 
-        await self._manager.add_job(job_class, job_id, params)
+        await self._manager.add_job(job_class, job_id, params, timeout=timeout)
 
-    async def start_job(self, job_id: str) -> None:
+    async def start_job(self, job_id: str, timeout: Optional[float] = None) -> None:
         """
         Start a job.
 
         Args:
             job_id: Job identifier.
+            timeout: Optional override for the control-plane timeout (seconds).
 
         Raises:
             ProcessControlError: If the system is not running or command fails.
@@ -147,14 +163,53 @@ class AsyncQueueSystem:
                 "system", "start_job", "Queue system is not running"
             )
 
-        await self._manager.start_job(job_id)
+        await self._manager.start_job(job_id, timeout=timeout)
 
-    async def stop_job(self, job_id: str) -> None:
+    async def start_job_background(
+        self, job_id: str, timeout: Optional[float] = None
+    ) -> None:
+        """
+        Start a job in the background without blocking the caller.
+
+        This helper schedules an internal task that calls ``start_job`` and
+        immediately returns control to the caller. Any control-plane errors are
+        logged but not propagated.
+
+        Args:
+            job_id: Job identifier.
+            timeout: Optional override for the control-plane timeout (seconds).
+
+        Raises:
+            ProcessControlError: If the queue system is not running.
+        """
+        if not self.is_running():
+            raise ProcessControlError(
+                "system", "start_job_background", "Queue system is not running"
+            )
+
+        async def _background_start() -> None:
+            """Start job and log, but do not propagate, control errors."""
+            if self._manager is None:
+                return
+
+            try:
+                await self._manager.start_job(job_id, timeout=timeout)
+            except ProcessControlError as exc:
+                logger.error(
+                    "Background start_job for job '%s' failed: %s",
+                    job_id,
+                    exc,
+                )
+
+        asyncio.create_task(_background_start())
+
+    async def stop_job(self, job_id: str, timeout: Optional[float] = None) -> None:
         """
         Stop a job.
 
         Args:
             job_id: Job identifier.
+            timeout: Optional override for the control-plane timeout (seconds).
 
         Raises:
             ProcessControlError: If the system is not running or command fails.
@@ -164,7 +219,7 @@ class AsyncQueueSystem:
                 "system", "stop_job", "Queue system is not running"
             )
 
-        await self._manager.stop_job(job_id)
+        await self._manager.stop_job(job_id, timeout=timeout)
 
     async def delete_job(self, job_id: str, force: bool = False) -> None:
         """
