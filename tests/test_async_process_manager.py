@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from multiprocessing import Queue
 from typing import Any, Dict
 
 import pytest
@@ -19,7 +20,12 @@ from queuemgr.process_config import ProcessManagerConfig
 
 
 class _DummyQueue:
-    """Minimal queue stub exposing ``put`` used by AsyncProcessManager."""
+    """
+    Minimal queue stub for AsyncProcessManager tests.
+
+    put() stores value; get(timeout=...) returns a fixed success response
+    so send_command_async path can complete when both queues are stubbed.
+    """
 
     def __init__(self) -> None:
         self.last_value: Any | None = None
@@ -27,6 +33,10 @@ class _DummyQueue:
     def put(self, value: Any) -> None:
         """Store last value for inspection in tests."""
         self.last_value = value
+
+    def get(self, timeout: Any = None) -> Dict[str, Any]:
+        """Return a fixed success response for stub response_queue."""
+        return {"status": "success", "result": {"ok": True}}
 
 
 class _FastResponseManager(AsyncProcessManager):
@@ -82,13 +92,16 @@ def test_send_command_uses_config_command_timeout() -> None:
 def test_send_command_uses_per_call_timeout_override() -> None:
     """
     Ensure per-call timeout parameter overrides the default command_timeout.
+    Uses an empty response queue so get_response_async times out after 0.05s.
     """
 
     async def runner() -> None:
-        # Large config timeout, but very small per-call timeout.
         config = ProcessManagerConfig(command_timeout=10.0)
-        manager = _SlowResponseManager(config=config, delay=0.2)
-        _prepare_manager(manager)
+        manager = AsyncProcessManager(config)
+        manager._control_queue = _DummyQueue()  # type: ignore[attr-defined]
+        manager._response_queue = Queue()  # empty: get(timeout=0.05) will timeout
+        manager._is_running = True  # type: ignore[attr-defined]
+        manager._command_lock = asyncio.Lock()  # type: ignore[attr-defined]
 
         with pytest.raises(ProcessControlError):
             await manager._send_command_async("test", {"value": 1}, timeout=0.05)
@@ -97,8 +110,41 @@ def test_send_command_uses_per_call_timeout_override() -> None:
     asyncio.run(runner())
     elapsed = time.perf_counter() - start_time
 
-    # We expect the override timeout to be honoured rather than the config value.
+    # Override timeout 0.05s honoured; no wait for config 10s.
     assert elapsed < 2.0
+
+
+def test_command_timeout_respected_no_early_timeout_at_10s() -> None:
+    """
+    With command_timeout=15s, a response delayed 12s must succeed;
+    no early timeout at the previous internal cap of ~10s.
+    """
+
+    async def runner() -> None:
+        config = ProcessManagerConfig(command_timeout=15.0)
+        manager = AsyncProcessManager(config)
+        control_queue: Queue = Queue()
+        response_queue: Queue = Queue()
+        manager._control_queue = control_queue  # type: ignore[attr-defined]
+        manager._response_queue = response_queue  # type: ignore[attr-defined]
+        manager._is_running = True  # type: ignore[attr-defined]
+        manager._command_lock = asyncio.Lock()  # type: ignore[attr-defined]
+
+        async def put_response_after_delay() -> None:
+            await asyncio.sleep(12.0)
+            response_queue.put({"status": "success", "result": "delayed"})
+
+        task = asyncio.create_task(put_response_after_delay())
+        t0 = time.perf_counter()
+        result = await manager._send_command_async("test", {}, timeout=15.0)
+        elapsed = time.perf_counter() - t0
+        await task
+
+        assert result == "delayed"
+        assert elapsed >= 11.0, "No early timeout at 10s; waited for 12s response"
+        assert elapsed < 14.0, "Response arrived ~12s"
+
+    asyncio.run(runner())
 
 
 async def _control_path_add_job_status_stop(

@@ -18,23 +18,23 @@ issues:
   methods_without_docstrings:
   - class: _DummyQueue
     file: tests/test_async_process_manager.py
-    line: 24
+    line: 30
     method: __init__
   - class: _SlowResponseManager
     file: tests/test_async_process_manager.py
-    line: 42
+    line: 52
     method: __init__
   - class: null
     file: tests/test_async_process_manager.py
-    line: 24
+    line: 30
     method: __init__
   - class: null
     file: tests/test_async_process_manager.py
-    line: 42
+    line: 52
     method: __init__
   - class: null
     file: queuemgr/async_process_manager_commands.py
-    line: 34
+    line: 37
     method: get_response
   - class: null
     file: queuemgr/async_process_manager_commands.py

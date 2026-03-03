@@ -629,6 +629,7 @@ WebJob:
 _DummyQueue:
 - __init__
 - put
+- get
 _FastResponseManager: []
 _QueueCommandBase:
 - __init__

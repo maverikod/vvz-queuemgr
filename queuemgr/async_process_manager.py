@@ -42,7 +42,7 @@ class AsyncProcessManager:
         self._process: Optional[Process] = None
         self._control_queue: Optional[Queue] = None
         self._response_queue: Optional[Queue] = None
-        self._shutdown_event: Optional[Event] = None
+        self._shutdown_event: Optional[Event] = None  # type: ignore[valid-type]
         self._is_running = False
         self._shutdown_callback: Optional[Callable] = None
         self._command_lock: Optional[asyncio.Lock] = None
@@ -155,13 +155,15 @@ class AsyncProcessManager:
                 break
             await asyncio.sleep(0.1)
 
-    async def _get_response_async(self) -> Dict[str, Any]:
-        """Get response from queue asynchronously."""
+    async def _get_response_async(
+        self, timeout_seconds: float = 10.0
+    ) -> Dict[str, Any]:
+        """Get response from queue asynchronously (e.g. for start() ready check)."""
         if self._response_queue is None:
             raise ProcessControlError(
                 "manager", "_get_response", "Response queue not initialized"
             )
-        return await get_response_async(self._response_queue)
+        return await get_response_async(self._response_queue, timeout_seconds)
 
     def is_running(self) -> bool:
         """Check if the manager is running."""
@@ -315,19 +317,16 @@ class AsyncProcessManager:
         """
         Send a command to the manager and wait for response (serialized by lock).
         """
-        if self._command_lock is None:
+        lock = self._command_lock
+        cq = self._control_queue
+        rq = self._response_queue
+        if lock is None or cq is None or rq is None:
             raise ProcessControlError(
-                "manager", command, "Manager not running or command lock not ready"
+                "manager", command,
+                "Manager not running or queues/lock not initialized"
             )
         return await send_command_async_impl(
-            self._control_queue,
-            self._response_queue,
-            self._command_lock,
-            self.config,
-            command,
-            params,
-            timeout,
-            lambda: self._get_response_async(),
+            cq, rq, lock, self.config, command, params, timeout
         )
 
 
