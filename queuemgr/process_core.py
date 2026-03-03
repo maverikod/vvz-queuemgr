@@ -333,7 +333,7 @@ class ProcessManager:
                             break
 
                         try:
-                            result = process_command(job_queue, command, params)
+                            result = process_command(job_queue, command, params, config)
                         except (
                             Exception
                         ) as command_error:  # pylint: disable=broad-except

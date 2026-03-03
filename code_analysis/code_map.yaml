@@ -1895,31 +1895,32 @@ functions:
     file: queuemgr/async_process_manager.py
     line: 34
     name: __init__
-  queuemgr/async_process_manager.py:get_response:
-    args: []
-    docstring: Attempt to read a single message from the response queue.
-    file: queuemgr/async_process_manager.py
-    line: 159
-    name: get_response
   queuemgr/async_process_manager.py:is_running:
     args:
     - self
     docstring: Check if the manager is running.
     file: queuemgr/async_process_manager.py
-    line: 175
+    line: 166
     name: is_running
-  queuemgr/async_process_manager.py:send_command:
+  queuemgr/async_process_manager_commands.py:get_response:
     args: []
-    docstring: Put the serialized command into the control queue.
-    file: queuemgr/async_process_manager.py
-    line: 339
-    name: send_command
+    docstring: null
+    file: queuemgr/async_process_manager_commands.py
+    line: 34
+    name: get_response
+  queuemgr/async_process_manager_commands.py:put_command:
+    args: []
+    docstring: null
+    file: queuemgr/async_process_manager_commands.py
+    line: 74
+    name: put_command
   queuemgr/async_process_runner.py:_execute_command:
     args:
     - job_queue
     - command
     - params
     - response_queue
+    - config
     docstring: Execute command and push response back to response queue.
     file: queuemgr/async_process_runner.py
     line: 102
@@ -4214,12 +4215,14 @@ functions:
     - job_queue
     - command
     - params
+    - config
     docstring: "Process a command in the manager process.\n\nArgs:\n    job_queue:\
       \ The job queue instance.\n    command: The command to process.\n    params:\
-      \ Command parameters.\n\nReturns:\n    Command result.\n\nRaises:\n    ValueError:\
+      \ Command parameters.\n    config: Optional manager config (used e.g. for bounded\
+      \ stop_job wait).\n\nReturns:\n    Command result.\n\nRaises:\n    ValueError:\
       \ If command is unknown."
     file: queuemgr/process_commands.py
-    line: 14
+    line: 16
     name: process_command
   queuemgr/process_context.py:__enter__:
     args:
@@ -5878,7 +5881,9 @@ functions:
 
       The test helpers avoid spawning subprocesses by injecting dummy queues
 
-      and marking the manager as running.'
+      and marking the manager as running. Also sets the command lock so
+
+      _send_command_async can run.'
     file: tests/test_async_process_manager.py
     line: 51
     name: _prepare_manager
@@ -5890,17 +5895,36 @@ functions:
     file: tests/test_async_process_manager.py
     line: 27
     name: put
+  tests/test_async_process_manager.py:test_control_path_add_job_multiple_get_status_stop_job_no_manager_timeout:
+    args:
+    - tmp_path
+    docstring: 'Full control path: add_job -> multiple get_job_status -> stop_job.
+
+      No manager timeout errors; each operation bounded (<10s) or deterministic error.'
+    file: tests/test_async_process_manager.py
+    line: 134
+    name: test_control_path_add_job_multiple_get_status_stop_job_no_manager_timeout
+  tests/test_async_process_manager.py:test_control_path_stress_long_running_job_status_polls_then_stop:
+    args:
+    - tmp_path
+    docstring: 'Stress: long-running job active; after delay, 3-5 status polls then
+      stop_job.
+
+      No manager timeout; same pass criteria (bounded or deterministic error).'
+    file: tests/test_async_process_manager.py
+    line: 195
+    name: test_control_path_stress_long_running_job_status_polls_then_stop
   tests/test_async_process_manager.py:test_send_command_uses_config_command_timeout:
     args: []
     docstring: Ensure _send_command_async uses the configured command_timeout by default.
     file: tests/test_async_process_manager.py
-    line: 64
+    line: 66
     name: test_send_command_uses_config_command_timeout
   tests/test_async_process_manager.py:test_send_command_uses_per_call_timeout_override:
     args: []
     docstring: Ensure per-call timeout parameter overrides the default command_timeout.
     file: tests/test_async_process_manager.py
-    line: 80
+    line: 82
     name: test_send_command_uses_per_call_timeout_override
   tests/test_exceptions.py:test_base_error_creation:
     args:
@@ -6293,67 +6317,67 @@ imports:
     type: import_from
   queuemgr/async_process_manager.py:Any:
     file: queuemgr/async_process_manager.py
-    line: 15
+    line: 14
     module: typing
     name: Any
     type: import_from
   queuemgr/async_process_manager.py:Callable:
     file: queuemgr/async_process_manager.py
-    line: 15
+    line: 14
     module: typing
     name: Callable
     type: import_from
   queuemgr/async_process_manager.py:Dict:
     file: queuemgr/async_process_manager.py
-    line: 15
+    line: 14
     module: typing
     name: Dict
     type: import_from
   queuemgr/async_process_manager.py:Event:
     file: queuemgr/async_process_manager.py
-    line: 14
+    line: 13
     module: multiprocessing
     name: Event
     type: import_from
   queuemgr/async_process_manager.py:List:
     file: queuemgr/async_process_manager.py
-    line: 15
+    line: 14
     module: typing
     name: List
     type: import_from
   queuemgr/async_process_manager.py:Optional:
     file: queuemgr/async_process_manager.py
-    line: 15
+    line: 14
     module: typing
     name: Optional
     type: import_from
   queuemgr/async_process_manager.py:Process:
     file: queuemgr/async_process_manager.py
-    line: 14
+    line: 13
     module: multiprocessing
     name: Process
     type: import_from
   queuemgr/async_process_manager.py:ProcessControlError:
     file: queuemgr/async_process_manager.py
-    line: 18
+    line: 17
     module: queuemgr.core.exceptions
     name: ProcessControlError
     type: import_from
   queuemgr/async_process_manager.py:ProcessManagerConfig:
     file: queuemgr/async_process_manager.py
-    line: 19
+    line: 18
     module: process_config
     name: ProcessManagerConfig
     type: import_from
   queuemgr/async_process_manager.py:Queue:
     file: queuemgr/async_process_manager.py
-    line: 14
+    line: 13
     module: multiprocessing
     name: Queue
     type: import_from
   queuemgr/async_process_manager.py:asynccontextmanager:
     file: queuemgr/async_process_manager.py
-    line: 16
+    line: 15
     module: contextlib
     name: asynccontextmanager
     type: import_from
@@ -6362,21 +6386,92 @@ imports:
     line: 11
     name: asyncio
     type: import
-  queuemgr/async_process_manager.py:logging:
-    file: queuemgr/async_process_manager.py
-    line: 12
-    name: logging
-    type: import
-  queuemgr/async_process_manager.py:run_async_process_manager:
+  queuemgr/async_process_manager.py:get_response_async:
     file: queuemgr/async_process_manager.py
     line: 20
+    module: async_process_manager_commands
+    name: get_response_async
+    type: import_from
+  queuemgr/async_process_manager.py:run_async_process_manager:
+    file: queuemgr/async_process_manager.py
+    line: 19
     module: async_process_runner
     name: run_async_process_manager
     type: import_from
+  queuemgr/async_process_manager.py:send_command_async:
+    file: queuemgr/async_process_manager.py
+    line: 20
+    module: async_process_manager_commands
+    name: send_command_async
+    type: import_from
   queuemgr/async_process_manager.py:time:
     file: queuemgr/async_process_manager.py
-    line: 13
+    line: 12
     name: time
+    type: import
+  queuemgr/async_process_manager_commands.py:Any:
+    file: queuemgr/async_process_manager_commands.py
+    line: 16
+    module: typing
+    name: Any
+    type: import_from
+  queuemgr/async_process_manager_commands.py:Awaitable:
+    file: queuemgr/async_process_manager_commands.py
+    line: 16
+    module: typing
+    name: Awaitable
+    type: import_from
+  queuemgr/async_process_manager_commands.py:Callable:
+    file: queuemgr/async_process_manager_commands.py
+    line: 16
+    module: typing
+    name: Callable
+    type: import_from
+  queuemgr/async_process_manager_commands.py:Dict:
+    file: queuemgr/async_process_manager_commands.py
+    line: 16
+    module: typing
+    name: Dict
+    type: import_from
+  queuemgr/async_process_manager_commands.py:Optional:
+    file: queuemgr/async_process_manager_commands.py
+    line: 16
+    module: typing
+    name: Optional
+    type: import_from
+  queuemgr/async_process_manager_commands.py:ProcessControlError:
+    file: queuemgr/async_process_manager_commands.py
+    line: 18
+    module: queuemgr.core.exceptions
+    name: ProcessControlError
+    type: import_from
+  queuemgr/async_process_manager_commands.py:ProcessManagerConfig:
+    file: queuemgr/async_process_manager_commands.py
+    line: 20
+    module: process_config
+    name: ProcessManagerConfig
+    type: import_from
+  queuemgr/async_process_manager_commands.py:Queue:
+    file: queuemgr/async_process_manager_commands.py
+    line: 15
+    module: multiprocessing
+    name: Queue
+    type: import_from
+  queuemgr/async_process_manager_commands.py:annotations:
+    file: queuemgr/async_process_manager_commands.py
+    line: 11
+    module: __future__
+    name: annotations
+    type: import_from
+  queuemgr/async_process_manager_commands.py:asyncio:
+    file: queuemgr/async_process_manager_commands.py
+    line: 13
+    name: asyncio
+    type: import
+  queuemgr/async_process_manager_commands.py:logging:
+    file: queuemgr/async_process_manager_commands.py
+    line: 14
+    name: logging
     type: import
   queuemgr/async_process_runner.py:Any:
     file: queuemgr/async_process_runner.py
@@ -8589,9 +8684,21 @@ imports:
     type: import_from
   queuemgr/process_commands.py:JobQueue:
     file: queuemgr/process_commands.py
-    line: 11
+    line: 13
     module: queue.job_queue
     name: JobQueue
+    type: import_from
+  queuemgr/process_commands.py:Optional:
+    file: queuemgr/process_commands.py
+    line: 10
+    module: typing
+    name: Optional
+    type: import_from
+  queuemgr/process_commands.py:ProcessManagerConfig:
+    file: queuemgr/process_commands.py
+    line: 12
+    module: process_config
+    name: ProcessManagerConfig
     type: import_from
   queuemgr/process_config.py:Dict:
     file: queuemgr/process_config.py
@@ -9840,11 +9947,23 @@ imports:
     module: queuemgr.process_config
     name: ProcessManagerConfig
     type: import_from
+  tests/test_async_process_manager.py:SimpleJob:
+    file: tests/test_async_process_manager.py
+    line: 167
+    module: queuemgr.examples.simple_manager_example
+    name: SimpleJob
+    type: import_from
   tests/test_async_process_manager.py:annotations:
     file: tests/test_async_process_manager.py
     line: 8
     module: __future__
     name: annotations
+    type: import_from
+  tests/test_async_process_manager.py:async_queue_system:
+    file: tests/test_async_process_manager.py
+    line: 166
+    module: queuemgr.async_process_manager
+    name: async_queue_system
     type: import_from
   tests/test_async_process_manager.py:asyncio:
     file: tests/test_async_process_manager.py

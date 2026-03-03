@@ -6,10 +6,6 @@ issues:
     file: queuemgr/async_simple_api.py
     limit: 400
     lines: 406
-  - exceeds_limit: 18
-    file: queuemgr/async_process_manager.py
-    limit: 400
-    lines: 418
   - exceeds_limit: 22
     file: queuemgr/jobs/base_core.py
     limit: 400
@@ -36,17 +32,25 @@ issues:
     file: tests/test_async_process_manager.py
     line: 42
     method: __init__
+  - class: null
+    file: queuemgr/async_process_manager_commands.py
+    line: 34
+    method: get_response
+  - class: null
+    file: queuemgr/async_process_manager_commands.py
+    line: 74
+    method: put_command
   not_implemented_in_non_abstract: []
 summary:
   any_type_usage: 0
   classes_without_docstrings: 0
-  files_too_large: 3
+  files_too_large: 2
   files_without_docstrings: 0
   generic_exception_usage: 0
   imports_in_middle: 0
   invalid_imports: 0
   max_lines_limit: 400
   methods_with_pass: 0
-  methods_without_docstrings: 4
+  methods_without_docstrings: 6
   not_implemented_in_non_abstract: 0
-  total_issues: 7
+  total_issues: 8

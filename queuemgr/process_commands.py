@@ -7,12 +7,17 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from .process_config import ProcessManagerConfig
 from .queue.job_queue import JobQueue
 
 
 def process_command(
-    job_queue: JobQueue, command: str, params: Dict[str, Any]
+    job_queue: JobQueue,
+    command: str,
+    params: Dict[str, Any],
+    config: Optional[ProcessManagerConfig] = None,
 ) -> Dict[str, Any] | None:
     """
     Process a command in the manager process.
@@ -21,6 +26,7 @@ def process_command(
         job_queue: The job queue instance.
         command: The command to process.
         params: Command parameters.
+        config: Optional manager config (used e.g. for bounded stop_job wait).
 
     Returns:
         Command result.
@@ -42,7 +48,8 @@ def process_command(
         return None
 
     elif command == "stop_job":
-        job_queue.stop_job(params["job_id"])
+        stop_timeout = config.stop_job_wait_timeout if config else 10.0
+        job_queue.stop_job(params["job_id"], timeout=stop_timeout)
         return None
 
     elif command == "delete_job":

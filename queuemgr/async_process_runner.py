@@ -80,7 +80,7 @@ def run_async_process_manager(
                     if command == "shutdown":
                         break
 
-                    _execute_command(job_queue, command, params, response_queue)
+                    _execute_command(job_queue, command, params, response_queue, config)
 
                 if time.time() - cleanup_timer > config.cleanup_interval:
                     job_queue.cleanup_completed_jobs()
@@ -104,10 +104,11 @@ def _execute_command(
     command: str,
     params: Dict[str, Any],
     response_queue: Queue,
+    config: ProcessManagerConfig,
 ) -> None:
     """Execute command and push response back to response queue."""
     try:
-        result = process_command(job_queue, command, params)
+        result = process_command(job_queue, command, params, config)
     except Exception as command_error:  # pylint: disable=broad-except
         error_message = f"[manager] Command '{command}' failed: {command_error}"
         LOGGER.exception("Async queue manager failed to process command '%s'", command)

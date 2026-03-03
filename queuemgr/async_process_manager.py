@@ -9,7 +9,6 @@ email: vasilyvz@gmail.com
 """
 
 import asyncio
-import logging
 import time
 from multiprocessing import Process, Queue, Event
 from typing import Dict, Any, Optional, Callable, List
@@ -18,9 +17,10 @@ from contextlib import asynccontextmanager
 from queuemgr.core.exceptions import ProcessControlError
 from .process_config import ProcessManagerConfig
 from .async_process_runner import run_async_process_manager
-
-
-logger = logging.getLogger("queuemgr.async_process_manager")
+from .async_process_manager_commands import (
+    get_response_async,
+    send_command_async as send_command_async_impl,
+)
 
 
 class AsyncProcessManager:
@@ -45,6 +45,7 @@ class AsyncProcessManager:
         self._shutdown_event: Optional[Event] = None
         self._is_running = False
         self._shutdown_callback: Optional[Callable] = None
+        self._command_lock: Optional[asyncio.Lock] = None
 
     async def start(self) -> None:
         """
@@ -96,6 +97,7 @@ class AsyncProcessManager:
             )
 
         self._is_running = True
+        self._command_lock = asyncio.Lock()
 
     async def stop(self, timeout: Optional[float] = None) -> None:
         """
@@ -139,6 +141,7 @@ class AsyncProcessManager:
 
         finally:
             self._is_running = False
+            self._command_lock = None
             self._process = None
             self._control_queue = None
             self._response_queue = None
@@ -154,23 +157,11 @@ class AsyncProcessManager:
 
     async def _get_response_async(self) -> Dict[str, Any]:
         """Get response from queue asynchronously."""
-        loop = asyncio.get_event_loop()
-
-        def get_response():
-            """Attempt to read a single message from the response queue."""
-            try:
-                return self._response_queue.get(timeout=0.1)
-            except Exception:
-                return None
-
-        # Poll the queue with short timeouts to avoid blocking
-        for _ in range(100):  # 10 seconds total
-            result = await loop.run_in_executor(None, get_response)
-            if result is not None:
-                return result
-            await asyncio.sleep(0.1)
-
-        raise asyncio.TimeoutError("No response received")
+        if self._response_queue is None:
+            raise ProcessControlError(
+                "manager", "_get_response", "Response queue not initialized"
+            )
+        return await get_response_async(self._response_queue)
 
     def is_running(self) -> bool:
         """Check if the manager is running."""
@@ -320,68 +311,24 @@ class AsyncProcessManager:
 
     async def _send_command_async(
         self, command: str, params: Dict[str, Any], timeout: Optional[float] = None
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
-        Send a command to the manager process and wait for response asynchronously.
-
-        The timeout applies to the control-plane round trip only and does not
-        limit the execution time of individual jobs.
+        Send a command to the manager and wait for response (serialized by lock).
         """
-        effective_timeout = (
-            timeout if timeout is not None else self.config.command_timeout
-        )
-
-        try:
-            if self._control_queue and self._response_queue:
-                # Send command in executor to avoid blocking the event loop.
-                loop = asyncio.get_event_loop()
-
-                def send_command() -> None:
-                    """Put the serialized command into the control queue."""
-                    self._control_queue.put({"command": command, "params": params})
-
-                await loop.run_in_executor(None, send_command)
-
-                # Get response with timeout
-                try:
-                    response = await asyncio.wait_for(
-                        self._get_response_async(), timeout=effective_timeout
-                    )
-                except asyncio.TimeoutError as exc:
-                    logger.warning(
-                        "Async manager command '%s' timed out after %.1fs",
-                        command,
-                        effective_timeout,
-                    )
-                    raise ProcessControlError(
-                        "manager", command, "Command timed out waiting for response"
-                    ) from exc
-            else:
-                raise ProcessControlError("manager", command, "Queues not initialized")
-
-            if response.get("status") == "error":
-                error_message = response.get("error", "Unknown error")
-                logger.error(
-                    "Async manager command '%s' failed inside manager: %s",
-                    command,
-                    error_message,
-                )
-                raise ProcessControlError("manager", command, error_message)
-
-            return response.get("result")
-
-        except asyncio.TimeoutError as exc:
-            logger.warning(
-                "Async manager command '%s' exceeded response timeout", command
-            )
+        if self._command_lock is None:
             raise ProcessControlError(
-                "manager", command, "Command timed out waiting for response"
-            ) from exc
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.error(
-                "Async manager command '%s' failed unexpectedly: %s", command, exc
+                "manager", command, "Manager not running or command lock not ready"
             )
-            raise ProcessControlError("manager", command, f"Command failed: {exc}")
+        return await send_command_async_impl(
+            self._control_queue,
+            self._response_queue,
+            self._command_lock,
+            self.config,
+            command,
+            params,
+            timeout,
+            lambda: self._get_response_async(),
+        )
 
 
 @asynccontextmanager
