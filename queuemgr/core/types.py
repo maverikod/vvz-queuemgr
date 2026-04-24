@@ -21,6 +21,8 @@ class JobStatus(IntEnum):
     COMPLETED = 2
     ERROR = 3
     INTERRUPTED = 4
+    STOPPED = 5
+    DELETED = 6
 
 
 class JobCommand(IntEnum):

@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from .process_config import ProcessManagerConfig
 from .queue.job_queue import JobQueue
+from queuemgr.queue.terminal_status import derive_command_success_fields
 
 
 def process_command(
@@ -57,7 +58,8 @@ def process_command(
         return None
 
     elif command == "get_job_status":
-        record = job_queue.get_job_status(params["job_id"])
+        job_id = params["job_id"]
+        record = job_queue.get_job_status(job_id)
         # Serialize JobRecord to dict for IPC
         result = {
             "job_id": record.job_id,
@@ -72,10 +74,14 @@ def process_command(
             result["started_at"] = record.started_at.isoformat()
         if record.completed_at is not None:
             result["completed_at"] = record.completed_at.isoformat()
+        jt = job_queue.get_job_type_name(job_id)
+        if jt:
+            result["job_type"] = jt
+        result.update(derive_command_success_fields(record.result))
         return result
 
     elif command == "list_jobs":
-        return job_queue.list_jobs()
+        return job_queue.list_jobs(status_filter=params.get("status_filter"))
 
     elif command == "get_job_logs":
         logs = job_queue.get_job_logs(params["job_id"])

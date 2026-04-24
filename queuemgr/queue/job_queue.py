@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, Type, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
 from queuemgr.core.types import JobId, JobRecord, JobStatus, JobCommand
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.core.registry import Registry, InMemoryRegistry
 from queuemgr.core.ipc import get_manager, create_job_shared_state, set_command
+from queuemgr.core.ipc_operations import update_job_state
+from queuemgr.queue.terminal_status import is_terminal_job_status
 from queuemgr.exceptions import (
     JobNotFoundError,
     JobAlreadyExistsError,
@@ -40,6 +42,11 @@ class JobQueue(JobQueueMetricsMixin):
         max_queue_size: Optional[int] = None,
         per_job_type_limits: Optional[Dict[str, int]] = None,
         completed_job_retention_seconds: Optional[float] = None,
+        terminal_job_retention_seconds: Optional[float] = None,
+        failed_terminal_retention_seconds: Optional[float] = None,
+        stopped_terminal_retention_seconds: Optional[float] = None,
+        deleted_terminal_retention_seconds: Optional[float] = None,
+        max_retained_terminal_jobs: int = 1000,
     ) -> None:
         """
         Initialize the job queue.
@@ -48,8 +55,15 @@ class JobQueue(JobQueueMetricsMixin):
             registry: Registry instance for persisting job states.
             max_queue_size: Global maximum number of jobs (optional).
             per_job_type_limits: Dict mapping job_type to max count (optional).
-            completed_job_retention_seconds: How long to keep completed/error jobs
-                before auto-removal (optional). If None, completed jobs are preserved.
+            completed_job_retention_seconds: Legacy TTL for completed and error jobs
+                when set; overrides per-status defaults for backward compatibility.
+            terminal_job_retention_seconds: TTL for completed and stopped jobs.
+            failed_terminal_retention_seconds: TTL for ERROR jobs (default 86400s).
+            stopped_terminal_retention_seconds: TTL for STOPPED jobs; defaults to
+                terminal_job_retention_seconds when omitted.
+            deleted_terminal_retention_seconds: TTL for DELETED jobs; defaults to
+                terminal_job_retention_seconds when omitted.
+            max_retained_terminal_jobs: Maximum terminal jobs kept in memory.
         """
         self.registry = registry or InMemoryRegistry()
         self._registry = self.registry  # Backward-compatibility alias
@@ -58,10 +72,39 @@ class JobQueue(JobQueueMetricsMixin):
         self._job_creation_times: Dict[JobId, datetime] = {}
         self._job_started_times: Dict[JobId, datetime] = {}
         self._job_completed_times: Dict[JobId, datetime] = {}
+        self._job_terminal_at: Dict[JobId, datetime] = {}
         self._job_types: Dict[JobId, str] = {}
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits or {}
         self.completed_job_retention_seconds = completed_job_retention_seconds
+        self.max_retained_terminal_jobs = max_retained_terminal_jobs
+
+        term = (
+            float(terminal_job_retention_seconds)
+            if terminal_job_retention_seconds is not None
+            else 3600.0
+        )
+        failed = (
+            float(failed_terminal_retention_seconds)
+            if failed_terminal_retention_seconds is not None
+            else 86400.0
+        )
+        if completed_job_retention_seconds is not None:
+            term = float(completed_job_retention_seconds)
+            failed = float(completed_job_retention_seconds)
+        self._retention_ttl_completed = term
+        self._retention_ttl_failed = failed
+        self._retention_ttl_stopped = (
+            float(stopped_terminal_retention_seconds)
+            if stopped_terminal_retention_seconds is not None
+            else term
+        )
+        self._retention_ttl_deleted = (
+            float(deleted_terminal_retention_seconds)
+            if deleted_terminal_retention_seconds is not None
+            else term
+        )
+
         load_jobs_from_registry(
             registry=self.registry,
             jobs=self._jobs,
@@ -69,6 +112,57 @@ class JobQueue(JobQueueMetricsMixin):
             job_types=self._job_types,
             logger=logger,
         )
+
+    def _purge_job_immediately(self, job_id: JobId) -> None:
+        """
+        Hard-remove a job from memory (used for retention cleanup and limit eviction).
+
+        Args:
+            job_id: Identifier to remove.
+
+        Raises:
+            JobNotFoundError: If the job is not tracked.
+        """
+        if job_id not in self._jobs:
+            raise JobNotFoundError(job_id)
+        job = self._jobs[job_id]
+        try:
+            if job.is_running():
+                try:
+                    job.terminate_process()
+                except ProcessControlError:
+                    pass
+        except ProcessControlError:
+            pass
+        del self._jobs[job_id]
+        self._job_creation_times.pop(job_id, None)
+        self._job_started_times.pop(job_id, None)
+        self._job_completed_times.pop(job_id, None)
+        self._job_terminal_at.pop(job_id, None)
+        self._job_types.pop(job_id, None)
+
+    def _evict_oldest_terminal_job(self) -> bool:
+        """
+        Purge the single oldest terminal job to free a queue slot.
+
+        Returns:
+            True if a job was removed, False when no terminal job is available.
+        """
+        terminals: List[Tuple[datetime, JobId]] = []
+        for jid, job in self._jobs.items():
+            st = job.get_status()["status"]
+            if is_terminal_job_status(st):
+                t_at = self._job_terminal_at.get(jid) or self._job_completed_times.get(
+                    jid
+                )
+                if t_at is None:
+                    t_at = self._job_creation_times.get(jid, datetime.now())
+                terminals.append((t_at, jid))
+        if not terminals:
+            return False
+        oldest_id = min(terminals, key=lambda x: x[0])[1]
+        self._purge_job_immediately(oldest_id)
+        return True
 
     def get_jobs(self) -> Mapping[JobId, QueueJobBase]:
         """
@@ -79,15 +173,23 @@ class JobQueue(JobQueueMetricsMixin):
         """
         return self._jobs.copy()
 
-    def list_jobs(self) -> List[Dict[str, Any]]:
+    def list_jobs(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Return a JSON-serializable snapshot for every queued job.
+
+        Args:
+            status_filter: When set, only jobs whose status name matches (case-folded).
 
         Returns:
             List of dictionaries describing each job (job_id, status, progress,
             metadata) that can be safely serialized to JSON for IPC responses.
         """
         job_snapshots: List[Dict[str, Any]] = []
+        if status_filter is None:
+            filter_folded = None
+        else:
+            stripped = status_filter.strip()
+            filter_folded = stripped.casefold() if stripped else None
         for job_id, job in self._jobs.items():
             status_data = job.get_status()
             status_value = status_data.get("status", JobStatus.PENDING)
@@ -96,19 +198,30 @@ class JobQueue(JobQueueMetricsMixin):
                 if isinstance(status_value, JobStatus)
                 else str(status_value)
             )
+            if filter_folded is not None:
+                if status_text.casefold() != filter_folded:
+                    continue
             created_at = self._job_creation_times.get(job_id, datetime.now())
-            job_snapshots.append(
-                {
-                    "job_id": job_id,
-                    "status": status_text,
-                    "progress": int(status_data.get("progress", 0)),
-                    "description": status_data.get("description", ""),
-                    "result": status_data.get("result"),
-                    "is_running": job.is_running(),
-                    "created_at": created_at.isoformat(),
-                    "updated_at": datetime.now().isoformat(),
-                }
-            )
+            started_at = self._job_started_times.get(job_id)
+            terminal_at = self._job_terminal_at.get(
+                job_id
+            ) or self._job_completed_times.get(job_id)
+            snap: Dict[str, Any] = {
+                "job_id": job_id,
+                "job_type": self._job_types.get(job_id, ""),
+                "status": status_text,
+                "progress": int(status_data.get("progress", 0)),
+                "description": status_data.get("description", ""),
+                "result": status_data.get("result"),
+                "is_running": job.is_running(),
+                "created_at": created_at.isoformat(),
+                "updated_at": datetime.now().isoformat(),
+            }
+            if started_at is not None:
+                snap["started_at"] = started_at.isoformat()
+            if terminal_at is not None:
+                snap["completed_at"] = terminal_at.isoformat()
+            job_snapshots.append(snap)
         return job_snapshots
 
     def get_job_status(self, job_id: JobId) -> JobRecord:
@@ -140,11 +253,13 @@ class JobQueue(JobQueueMetricsMixin):
             started_at = datetime.now()
             self._job_started_times[job_id] = started_at
 
-        # Update completed_at if job is completed/error but not tracked yet
-        is_completed = current_status in [JobStatus.COMPLETED, JobStatus.ERROR]
-        if is_completed and completed_at is None:
-            completed_at = datetime.now()
-            self._job_completed_times[job_id] = completed_at
+        if is_terminal_job_status(current_status):
+            if job_id not in self._job_terminal_at:
+                mark = datetime.now()
+                self._job_terminal_at[job_id] = mark
+            if completed_at is None:
+                completed_at = self._job_terminal_at[job_id]
+                self._job_completed_times[job_id] = completed_at
 
         return JobRecord(
             job_id=job_id,
@@ -197,8 +312,14 @@ class JobQueue(JobQueueMetricsMixin):
         job_type = job_instance.__class__.__name__
 
         def delete_job_callback(target_job_id: JobId) -> None:
-            """Internal helper to delete jobs during eviction."""
-            self.delete_job(target_job_id, force=True)
+            """Hard-remove jobs during limit eviction (not soft user deletion)."""
+            self._purge_job_immediately(target_job_id)
+
+        if self.max_queue_size:
+            self.cleanup_completed_jobs()
+            while len(self._jobs) >= self.max_queue_size:
+                if not self._evict_oldest_terminal_job():
+                    break
 
         enforce_per_type_limit(
             job_type=job_type,
@@ -245,7 +366,9 @@ class JobQueue(JobQueueMetricsMixin):
 
     def delete_job(self, job_id: JobId, force: bool = False) -> None:
         """
-        Delete job; if running, request STOP or terminate if force=True.
+        Mark a job as DELETED and retain it in memory until retention cleanup.
+
+        If running, request STOP or terminate when force=True.
 
         Args:
             job_id: Job identifier to delete.
@@ -259,6 +382,7 @@ class JobQueue(JobQueueMetricsMixin):
             raise JobNotFoundError(job_id)
 
         job = self._jobs[job_id]
+        created_at = self._job_creation_times.get(job_id, datetime.now())
 
         try:
             if job.is_running():
@@ -269,27 +393,29 @@ class JobQueue(JobQueueMetricsMixin):
         except ProcessControlError:
             if not force:
                 raise
-            # If force=True, try to terminate anyway
             try:
                 job.terminate_process()
             except ProcessControlError:
-                pass  # Ignore errors when force deleting
+                pass
 
-        # Remove from jobs dictionary
-        del self._jobs[job_id]
-        del self._job_creation_times[job_id]
-        if job_id in self._job_types:
-            del self._job_types[job_id]
+        now = datetime.now()
+        if job._shared_state is not None:
+            try:
+                update_job_state(job._shared_state, status=JobStatus.DELETED)
+            except (ValueError, OSError, IOError, TypeError):
+                logger.warning("Could not mark job %s DELETED in shared state", job_id)
+        self._job_terminal_at[job_id] = now
+        self._job_completed_times[job_id] = now
 
-        # Write deletion record to registry
+        progress_val = int(job.get_status().get("progress", 0))
         deletion_record = JobRecord(
             job_id=job_id,
-            status=JobStatus.INTERRUPTED,
-            progress=0,
+            status=JobStatus.DELETED,
+            progress=progress_val,
             description="Job deleted",
             result=None,
-            created_at=self._job_creation_times.get(job_id, datetime.now()),
-            updated_at=datetime.now(),
+            created_at=created_at,
+            updated_at=now,
         )
         self.registry.append(deletion_record)
 
@@ -310,6 +436,9 @@ class JobQueue(JobQueueMetricsMixin):
 
         job = self._jobs[job_id]
         current_status = job.get_status()["status"]
+
+        if is_terminal_job_status(current_status):
+            raise InvalidJobStateError(job_id, current_status.name, "start")
 
         # Check if job can be started
         if current_status not in [JobStatus.PENDING, JobStatus.INTERRUPTED]:
@@ -396,3 +525,7 @@ class JobQueue(JobQueueMetricsMixin):
         # Clear all jobs
         self._jobs.clear()
         self._job_creation_times.clear()
+        self._job_started_times.clear()
+        self._job_completed_times.clear()
+        self._job_terminal_at.clear()
+        self._job_types.clear()

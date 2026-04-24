@@ -12,7 +12,7 @@ import signal
 import time
 from multiprocessing import Process, Queue, Event
 from queue import Empty
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from .queue.job_queue import JobQueue
 from .core.registry import JsonlRegistry
@@ -225,9 +225,12 @@ class ProcessManager:
 
         return self._send_command("get_job_status", {"job_id": job_id})
 
-    def list_jobs(self) -> list:
+    def list_jobs(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List all jobs.
+
+        Args:
+            status_filter: Optional case-insensitive status name filter.
 
         Returns:
             List of job information.
@@ -238,7 +241,10 @@ class ProcessManager:
         if not self.is_running():
             raise ProcessControlError("manager", "stop", "Manager is not running")
 
-        return self._send_command("list_jobs", {})
+        payload: Dict[str, Any] = {}
+        if status_filter is not None:
+            payload["status_filter"] = status_filter
+        return self._send_command("list_jobs", payload)
 
     def _send_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Send a command to the manager process and wait for response."""
@@ -307,7 +313,20 @@ class ProcessManager:
                 registry,
                 max_queue_size=config.max_queue_size,
                 per_job_type_limits=config.per_job_type_limits,
-                completed_job_retention_seconds=config.completed_job_retention_seconds,
+                completed_job_retention_seconds=(
+                    config.completed_job_retention_seconds
+                ),
+                terminal_job_retention_seconds=(config.terminal_job_retention_seconds),
+                failed_terminal_retention_seconds=(
+                    config.failed_terminal_retention_seconds
+                ),
+                stopped_terminal_retention_seconds=(
+                    config.stopped_terminal_retention_seconds
+                ),
+                deleted_terminal_retention_seconds=(
+                    config.deleted_terminal_retention_seconds
+                ),
+                max_retained_terminal_jobs=config.max_retained_terminal_jobs,
             )
 
             # Signal that we're ready

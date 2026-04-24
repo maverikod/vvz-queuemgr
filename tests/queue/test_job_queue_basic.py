@@ -113,7 +113,9 @@ class TestJobQueueBasic:
             queue.delete_job("non-existent")
 
     def test_delete_job_not_running(self):
-        """Test deleting job that is not running."""
+        """Soft delete keeps the job until retention cleanup removes it."""
+        from queuemgr.core.types import JobStatus
+
         queue = JobQueue()
 
         # Add test job
@@ -122,8 +124,8 @@ class TestJobQueueBasic:
         # Delete job
         queue.delete_job("test-job-1")
 
-        assert "test-job-1" not in queue._jobs
-        assert "test-job-1" not in queue._job_creation_times
+        assert "test-job-1" in queue._jobs
+        assert queue.get_job_status("test-job-1").status == JobStatus.DELETED
 
     def test_get_job_count(self):
         """Test getting job count."""

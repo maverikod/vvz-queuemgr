@@ -59,7 +59,18 @@ def run_async_process_manager(
             registry,
             max_queue_size=config.max_queue_size,
             per_job_type_limits=config.per_job_type_limits,
-            completed_job_retention_seconds=config.completed_job_retention_seconds,
+            completed_job_retention_seconds=(config.completed_job_retention_seconds),
+            terminal_job_retention_seconds=(config.terminal_job_retention_seconds),
+            failed_terminal_retention_seconds=(
+                config.failed_terminal_retention_seconds
+            ),
+            stopped_terminal_retention_seconds=(
+                config.stopped_terminal_retention_seconds
+            ),
+            deleted_terminal_retention_seconds=(
+                config.deleted_terminal_retention_seconds
+            ),
+            max_retained_terminal_jobs=config.max_retained_terminal_jobs,
         )
 
         response_queue.put({"status": "ready"})

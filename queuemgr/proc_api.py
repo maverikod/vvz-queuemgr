@@ -164,9 +164,12 @@ class ProcQueueSystem:
         self._ensure_running()
         return self._manager.get_job_status(job_id)
 
-    def list_jobs(self) -> List[Dict[str, Any]]:
+    def list_jobs(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List all jobs.
+
+        Args:
+            status_filter: Optional case-insensitive status name filter.
 
         Returns:
             List of job information.
@@ -175,7 +178,7 @@ class ProcQueueSystem:
             ProcessControlError: If the system is not running or command fails.
         """
         self._ensure_running()
-        return self._manager.list_jobs()
+        return self._manager.list_jobs(status_filter=status_filter)
 
     def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
         """
@@ -295,9 +298,9 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
     return get_proc_queue_system().get_job_status(job_id)
 
 
-def list_jobs() -> List[Dict[str, Any]]:
+def list_jobs(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     """List all jobs in the global proc queue system."""
-    return get_proc_queue_system().list_jobs()
+    return get_proc_queue_system().list_jobs(status_filter=status_filter)
 
 
 def start_proc_queue_system(

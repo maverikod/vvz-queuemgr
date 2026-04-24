@@ -80,6 +80,7 @@ class TestJobQueueListJobs:
         job_snapshot = jobs[0]
 
         assert job_snapshot["job_id"] == "test-job"
+        assert job_snapshot["job_type"] == "SampleJob"
         assert job_snapshot["status"] == JobStatus.PENDING.name
         assert job_snapshot["progress"] == 0
         assert job_snapshot["is_running"] is False
@@ -90,3 +91,19 @@ class TestJobQueueListJobs:
 
         # Ensure JSON serialization succeeds without custom encoders
         json.dumps(jobs)
+
+    def test_list_jobs_status_filter(self) -> None:
+        """list_jobs respects status_filter (case-insensitive)."""
+        registry = InMemoryRegistry()
+        queue = JobQueue(registry)
+        queue.add_job(SampleJob("j1", {}))
+        queue.add_job(SampleJob("j2", {}))
+
+        pending = queue.list_jobs(status_filter="PENDING")
+        assert len(pending) == 2
+
+        completed = queue.list_jobs(status_filter="completed")
+        assert completed == []
+
+        empty_filter = queue.list_jobs(status_filter="   ")
+        assert len(empty_filter) == 2

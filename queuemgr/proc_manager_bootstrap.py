@@ -19,6 +19,7 @@ from typing import Any, Dict
 from queuemgr.core.registry import JsonlRegistry
 from queuemgr.proc_config import ProcManagerConfig
 from queuemgr.queue.job_queue import JobQueue
+from queuemgr.queue.terminal_status import derive_command_success_fields
 
 
 def run_proc_manager_process(config: ProcManagerConfig) -> None:
@@ -42,6 +43,21 @@ def run_proc_manager_process(config: ProcManagerConfig) -> None:
             per_job_type_limits=getattr(config, "per_job_type_limits", None),
             completed_job_retention_seconds=getattr(
                 config, "completed_job_retention_seconds", None
+            ),
+            terminal_job_retention_seconds=getattr(
+                config, "terminal_job_retention_seconds", None
+            ),
+            failed_terminal_retention_seconds=getattr(
+                config, "failed_terminal_retention_seconds", None
+            ),
+            stopped_terminal_retention_seconds=getattr(
+                config, "stopped_terminal_retention_seconds", None
+            ),
+            deleted_terminal_retention_seconds=getattr(
+                config, "deleted_terminal_retention_seconds", None
+            ),
+            max_retained_terminal_jobs=getattr(
+                config, "max_retained_terminal_jobs", 1000
             ),
         )
 
@@ -124,7 +140,8 @@ def process_proc_command(
             return {"status": "success"}
 
         if command == "get_job_status":
-            status = queue.get_job_status(params["job_id"])
+            job_id = params["job_id"]
+            status = queue.get_job_status(job_id)
             # Serialize JobRecord to dict
             result = {
                 "job_id": status.job_id,
@@ -139,10 +156,14 @@ def process_proc_command(
                 result["started_at"] = status.started_at.isoformat()
             if status.completed_at is not None:
                 result["completed_at"] = status.completed_at.isoformat()
+            jt = queue.get_job_type_name(job_id)
+            if jt:
+                result["job_type"] = jt
+            result.update(derive_command_success_fields(status.result))
             return {"status": "success", "result": result}
 
         if command == "list_jobs":
-            jobs = queue.list_jobs()
+            jobs = queue.list_jobs(status_filter=params.get("status_filter"))
             return {"status": "success", "result": jobs}
 
         if command == "get_job_logs":

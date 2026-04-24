@@ -37,6 +37,11 @@ class AsyncQueueSystem:
         max_queue_size: Optional[int] = None,
         per_job_type_limits: Optional[Dict[str, int]] = None,
         completed_job_retention_seconds: Optional[float] = None,
+        terminal_job_retention_seconds: Optional[float] = None,
+        failed_terminal_retention_seconds: Optional[float] = None,
+        stopped_terminal_retention_seconds: Optional[float] = None,
+        deleted_terminal_retention_seconds: Optional[float] = None,
+        max_retained_terminal_jobs: int = 1000,
         command_timeout: float = 30.0,
     ):
         """
@@ -47,8 +52,15 @@ class AsyncQueueSystem:
             shutdown_timeout: Timeout for graceful shutdown.
             max_queue_size: Global maximum number of jobs (optional).
             per_job_type_limits: Dict mapping job_type to max count (optional).
-            completed_job_retention_seconds: How long to keep completed/error jobs
-                before auto-removal (optional). If None, completed jobs are preserved.
+            completed_job_retention_seconds: Deprecated single TTL when set; overrides
+                terminal retention for completed and failed jobs.
+            terminal_job_retention_seconds: TTL for completed/stopped terminal jobs.
+            failed_terminal_retention_seconds: TTL for ERROR terminal jobs.
+            stopped_terminal_retention_seconds: TTL for STOPPED jobs (default: same as
+                terminal_job_retention_seconds).
+            deleted_terminal_retention_seconds: TTL for DELETED jobs (default: same as
+                terminal_job_retention_seconds).
+            max_retained_terminal_jobs: Cap on terminal jobs retained in memory.
             command_timeout: Maximum time to wait for a manager control command
                 response. This timeout applies only to IPC control operations and
                 does not limit job execution time.
@@ -58,6 +70,11 @@ class AsyncQueueSystem:
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits
         self.completed_job_retention_seconds = completed_job_retention_seconds
+        self.terminal_job_retention_seconds = terminal_job_retention_seconds
+        self.failed_terminal_retention_seconds = failed_terminal_retention_seconds
+        self.stopped_terminal_retention_seconds = stopped_terminal_retention_seconds
+        self.deleted_terminal_retention_seconds = deleted_terminal_retention_seconds
+        self.max_retained_terminal_jobs = max_retained_terminal_jobs
         self.command_timeout = command_timeout
         self._manager: Optional[AsyncProcessManager] = None
         self._is_initialized = False
@@ -82,7 +99,18 @@ class AsyncQueueSystem:
                 shutdown_timeout=self.shutdown_timeout,
                 max_queue_size=self.max_queue_size,
                 per_job_type_limits=self.per_job_type_limits,
-                completed_job_retention_seconds=self.completed_job_retention_seconds,
+                completed_job_retention_seconds=(self.completed_job_retention_seconds),
+                terminal_job_retention_seconds=(self.terminal_job_retention_seconds),
+                failed_terminal_retention_seconds=(
+                    self.failed_terminal_retention_seconds
+                ),
+                stopped_terminal_retention_seconds=(
+                    self.stopped_terminal_retention_seconds
+                ),
+                deleted_terminal_retention_seconds=(
+                    self.deleted_terminal_retention_seconds
+                ),
+                max_retained_terminal_jobs=self.max_retained_terminal_jobs,
                 command_timeout=self.command_timeout,
             )
             self._manager = AsyncProcessManager(config)
@@ -259,9 +287,14 @@ class AsyncQueueSystem:
 
         return await self._manager.get_job_status(job_id)
 
-    async def list_jobs(self) -> List[Dict[str, Any]]:
+    async def list_jobs(
+        self, status_filter: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         List all jobs.
+
+        Args:
+            status_filter: Optional case-insensitive status name filter.
 
         Returns:
             List of job information.
@@ -274,7 +307,7 @@ class AsyncQueueSystem:
                 "system", "list_jobs", "Queue system is not running"
             )
 
-        return await self._manager.list_jobs()
+        return await self._manager.list_jobs(status_filter=status_filter)
 
     async def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:
         """

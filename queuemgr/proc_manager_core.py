@@ -223,9 +223,12 @@ class ProcManager:
         result = self._send_command("get_job_status", {"job_id": job_id})
         return result if isinstance(result, dict) else {}
 
-    def list_jobs(self) -> list:
+    def list_jobs(self, status_filter: Optional[str] = None) -> list:
         """
         List all jobs.
+
+        Args:
+            status_filter: Optional case-insensitive status name filter.
 
         Returns:
             List of job information.
@@ -238,7 +241,10 @@ class ProcManager:
                 "manager", "operation", Exception("Manager is not running")
             )
 
-        result = self._send_command("list_jobs", {})
+        params: Dict[str, Any] = {}
+        if status_filter is not None:
+            params["status_filter"] = status_filter
+        result = self._send_command("list_jobs", params)
         return result if isinstance(result, list) else []
 
     def get_job_logs(self, job_id: str) -> Dict[str, List[str]]:

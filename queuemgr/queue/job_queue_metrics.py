@@ -7,12 +7,14 @@ email: vasilyvz@gmail.com
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from queuemgr.core.types import JobId, JobStatus
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.exceptions import JobNotFoundError
+from queuemgr.queue.terminal_status import is_terminal_job_status
 
 
 class JobQueueMetricsMixin:
@@ -45,6 +47,18 @@ class JobQueueMetricsMixin:
         """
         return {job_id: job for job_id, job in self._jobs.items() if job.is_running()}
 
+    def get_job_type_name(self, job_id: JobId) -> Optional[str]:
+        """
+        Return the class name used as job type for the given id.
+
+        Args:
+            job_id: Job identifier.
+
+        Returns:
+            Registered type label, or None when unknown.
+        """
+        return self._job_types.get(job_id)
+
     def get_job_by_id(self, job_id: JobId) -> Optional[QueueJobBase]:
         """
         Lookup job instance without raising ``JobNotFoundError``.
@@ -56,6 +70,45 @@ class JobQueueMetricsMixin:
             Job instance when found, otherwise ``None``.
         """
         return self._jobs.get(job_id)
+
+    def _retention_seconds_for_status(self, status: JobStatus) -> float:
+        """
+        Return TTL (seconds) for a terminal status, or infinity when disabled.
+
+        Args:
+            status: Terminal job status.
+
+        Returns:
+            Retention duration in seconds; ``math.inf`` means no TTL eviction.
+        """
+        if status == JobStatus.ERROR:
+            ttl = getattr(self, "_retention_ttl_failed", math.inf)
+        elif status == JobStatus.STOPPED:
+            ttl = getattr(self, "_retention_ttl_stopped", math.inf)
+        elif status == JobStatus.DELETED:
+            ttl = getattr(self, "_retention_ttl_deleted", math.inf)
+        else:
+            ttl = getattr(self, "_retention_ttl_completed", math.inf)
+        if ttl is None:
+            return math.inf
+        return float(ttl)
+
+    def _terminal_timestamp(self, job_id: JobId) -> Optional[datetime]:
+        """
+        Return when the job first reached a terminal state, if known.
+
+        Args:
+            job_id: Job identifier.
+
+        Returns:
+            Timestamp or None when not yet recorded.
+        """
+        terminal_at = getattr(self, "_job_terminal_at", {}).get(job_id)
+        if terminal_at is not None:
+            return terminal_at
+        if hasattr(self, "_job_completed_times"):
+            return self._job_completed_times.get(job_id)
+        return None
 
     def list_job_statuses(self) -> Dict[JobId, JobStatus]:
         """
@@ -72,84 +125,56 @@ class JobQueueMetricsMixin:
 
     def cleanup_completed_jobs(self) -> int:
         """
-        Remove jobs that finished with COMPLETED or ERROR statuses.
+        Remove terminal jobs past retention TTL or over max_retained_terminal_jobs.
 
-        Jobs are removed only if:
-        1. They have been completed/errored for longer than
-           completed_job_retention_seconds (if configured), OR
-        2. Limits are configured and cleanup is needed for space.
-
-        If completed_job_retention_seconds is None and no limits are set,
-        completed jobs are preserved to allow clients to retrieve results.
+        Pending and running jobs are never removed. Uses per-status TTL attributes
+        on ``JobQueue`` (``_retention_ttl_*``) and ``max_retained_terminal_jobs``.
 
         Returns:
-            Number of jobs removed from the in-memory queue.
+            Number of jobs purged from the in-memory queue.
         """
-        from datetime import datetime
-
-        retention_seconds = getattr(self, "completed_job_retention_seconds", None)
-        has_limits = False
-        if hasattr(self, "max_queue_size") and self.max_queue_size is not None:
-            has_limits = True
-        if hasattr(self, "per_job_type_limits") and self.per_job_type_limits:
-            has_limits = True
-
-        # If no retention and no limits, preserve completed jobs
-        if retention_seconds is None and not has_limits:
+        purge = getattr(self, "_purge_job_immediately", None)
+        if purge is None:
             return 0
 
         now = datetime.now()
-        jobs_to_remove = []
+        terminal_rows: List[Tuple[JobId, JobStatus, datetime]] = []
 
         for job_id, job in self._jobs.items():
             status_data = job.get_status()
             status = status_data["status"]
-
-            if status not in [JobStatus.COMPLETED, JobStatus.ERROR]:
+            if not is_terminal_job_status(status):
                 continue
+            t_at = self._terminal_timestamp(job_id)
+            if t_at is None:
+                t_at = self._job_creation_times.get(job_id, now)
+            terminal_rows.append((job_id, status, t_at))
 
-            # Check if job should be removed based on retention time
-            completed_at = None
-            if hasattr(self, "_job_completed_times"):
-                completed_at = self._job_completed_times.get(job_id)
+        jobs_to_remove: List[JobId] = []
 
-            # If completed_at is not set yet, try to get it from job status
-            if completed_at is None:
-                # Job just completed, don't remove it yet
-                continue
-
-            # Check retention time
-            if retention_seconds is not None:
-                time_since_completion = (now - completed_at).total_seconds()
-                if time_since_completion >= retention_seconds:
-                    jobs_to_remove.append(job_id)
-                    continue
-
-            # If limits are set and we need space, remove old completed jobs
-            if has_limits:
-                # Only remove if retention allows
-                # (or if retention is None and we need space)
-                time_since = (now - completed_at).total_seconds()
-                if retention_seconds is None or (
-                    retention_seconds is not None and time_since >= retention_seconds
-                ):
+        for job_id, status, t_at in terminal_rows:
+            ttl = self._retention_seconds_for_status(status)
+            if not math.isinf(ttl):
+                age = (now - t_at).total_seconds()
+                if age >= ttl:
                     jobs_to_remove.append(job_id)
 
-        for job_id in jobs_to_remove:
-            del self._jobs[job_id]
-            if hasattr(self, "_job_creation_times"):
-                if job_id in self._job_creation_times:
-                    del self._job_creation_times[job_id]
-            if hasattr(self, "_job_started_times"):
-                if job_id in self._job_started_times:
-                    del self._job_started_times[job_id]
-            if hasattr(self, "_job_completed_times"):
-                if job_id in self._job_completed_times:
-                    del self._job_completed_times[job_id]
-            if hasattr(self, "_job_types") and job_id in self._job_types:
-                del self._job_types[job_id]
+        survivors = [(j, s, t) for j, s, t in terminal_rows if j not in jobs_to_remove]
+        max_retained = int(getattr(self, "max_retained_terminal_jobs", 1000))
+        if len(survivors) > max_retained:
+            survivors_sorted = sorted(survivors, key=lambda row: row[2])
+            overflow = len(survivors) - max_retained
+            for job_id, _, _ in survivors_sorted[:overflow]:
+                jobs_to_remove.append(job_id)
 
-        return len(jobs_to_remove)
+        removed = 0
+        for job_id in set(jobs_to_remove):
+            try:
+                purge(job_id)
+                removed += 1
+            except JobNotFoundError:
+                continue
+        return removed
 
     def _get_jobs_by_type(self, job_type: str) -> List[JobId]:
         """

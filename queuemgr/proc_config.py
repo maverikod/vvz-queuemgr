@@ -25,3 +25,8 @@ class ProcManagerConfig:
     max_queue_size: Optional[int] = None
     per_job_type_limits: Optional[Dict[str, int]] = None
     completed_job_retention_seconds: Optional[float] = None
+    terminal_job_retention_seconds: Optional[float] = None
+    failed_terminal_retention_seconds: Optional[float] = None
+    stopped_terminal_retention_seconds: Optional[float] = None
+    deleted_terminal_retention_seconds: Optional[float] = None
+    max_retained_terminal_jobs: int = 1000

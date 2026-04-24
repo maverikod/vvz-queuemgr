@@ -242,12 +242,21 @@ class QueueListJobsCommand(_QueueCommandBase):
 
     def get_schema(self) -> Dict[str, Any]:
         """Describe the schema for the list jobs command."""
-        return {"type": "object", "properties": {}}
+        return {
+            "type": "object",
+            "properties": {
+                "status_filter": {
+                    "type": "string",
+                    "description": "Optional case-insensitive job status filter",
+                },
+            },
+        }
 
     async def execute(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute queue list jobs command."""
         queue = self._get_queue()
-        jobs = await queue.list_jobs()
+        status_filter = params.get("status_filter")
+        jobs = await queue.list_jobs(status_filter=status_filter)
         return {"jobs": jobs, "count": len(jobs)}
 
 

@@ -272,9 +272,17 @@ class AsyncProcessManager:
             "get_job_status", {"job_id": job_id}, timeout=timeout
         )
 
-    async def list_jobs(self, timeout: Optional[float] = None) -> list:
+    async def list_jobs(
+        self,
+        status_filter: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> list:
         """
         List all jobs.
+
+        Args:
+            status_filter: Optional case-insensitive status name filter.
+            timeout: Control-plane timeout override.
 
         Returns:
             List of job information.
@@ -285,7 +293,10 @@ class AsyncProcessManager:
         if not self.is_running():
             raise ProcessControlError("manager", "list_jobs", "Manager is not running")
 
-        return await self._send_command_async("list_jobs", {}, timeout=timeout)
+        payload: Dict[str, Any] = {}
+        if status_filter is not None:
+            payload["status_filter"] = status_filter
+        return await self._send_command_async("list_jobs", payload, timeout=timeout)
 
     async def get_job_logs(
         self, job_id: str, timeout: Optional[float] = None
@@ -322,8 +333,7 @@ class AsyncProcessManager:
         rq = self._response_queue
         if lock is None or cq is None or rq is None:
             raise ProcessControlError(
-                "manager", command,
-                "Manager not running or queues/lock not initialized"
+                "manager", command, "Manager not running or queues/lock not initialized"
             )
         return await send_command_async_impl(
             cq, rq, lock, self.config, command, params, timeout
