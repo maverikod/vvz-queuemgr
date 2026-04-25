@@ -78,6 +78,27 @@ class TestJsonlRegistry:
             assert data["description"] == "Test job"
             assert data["result"] is None
 
+    def test_deserialize_interrupted_maps_to_stopped(self) -> None:
+        """JSONL lines with legacy INTERRUPTED (4) load as STOPPED."""
+        now = datetime.now().isoformat()
+        line = json.dumps(
+            {
+                "job_id": "legacy-interrupted",
+                "status": JobStatus.INTERRUPTED.value,
+                "progress": 10,
+                "description": "was interrupted",
+                "result": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        with open(self.registry_path, "w", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+        reloaded = JsonlRegistry(self.registry_path)
+        loaded = reloaded.latest("legacy-interrupted")
+        assert loaded is not None
+        assert loaded.status == JobStatus.STOPPED
+
     def test_append_multiple_records(self):
         """Test appending multiple records."""
         now = datetime.now()

@@ -11,7 +11,15 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
-from queuemgr.core.types import JobId, JobRecord, JobStatus, JobCommand
+from queuemgr.constants import DESCRIPTION_JOB_STOPPED
+from queuemgr.core.types import (
+    JobId,
+    JobRecord,
+    JobStatus,
+    JobCommand,
+    normalize_public_job_status,
+    public_status_name,
+)
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.core.registry import Registry, InMemoryRegistry
 from queuemgr.core.ipc import get_manager, create_job_shared_state, set_command
@@ -193,11 +201,11 @@ class JobQueue(JobQueueMetricsMixin):
         for job_id, job in self._jobs.items():
             status_data = job.get_status()
             status_value = status_data.get("status", JobStatus.PENDING)
-            status_text = (
-                status_value.name
-                if isinstance(status_value, JobStatus)
-                else str(status_value)
-            )
+            if isinstance(status_value, JobStatus):
+                status_enum = status_value
+            else:
+                status_enum = JobStatus(int(status_value))
+            status_text = public_status_name(status_enum)
             if filter_folded is not None:
                 if status_text.casefold() != filter_folded:
                     continue
@@ -242,14 +250,15 @@ class JobQueue(JobQueueMetricsMixin):
 
         job = self._jobs[job_id]
         status_data = job.get_status()
-        current_status = status_data["status"]
+        current_status = normalize_public_job_status(status_data["status"])
 
         created_at = self._job_creation_times.get(job_id, datetime.now())
         started_at = self._job_started_times.get(job_id)
         completed_at = self._job_completed_times.get(job_id)
 
-        # Update started_at if job is running but not tracked yet
-        if current_status == JobStatus.RUNNING and started_at is None:
+        # Update started_at if job is running but not tracked yet (raw RUNNING)
+        raw_status = status_data["status"]
+        if raw_status == JobStatus.RUNNING and started_at is None:
             started_at = datetime.now()
             self._job_started_times[job_id] = started_at
 
@@ -458,9 +467,55 @@ class JobQueue(JobQueueMetricsMixin):
         except ProcessControlError as e:
             raise ProcessControlError(job_id, "start", e)
 
+    def _finalize_stop_authoritative(self, job_id: JobId, created_at: datetime) -> None:
+        """
+        Record STOPPED as the durable terminal outcome after a successful stop.
+
+        Does not overwrite DELETED. Appends a registry snapshot and sets
+        terminal retention timestamps.
+
+        Args:
+            job_id: Job identifier.
+            created_at: Original job creation time for the snapshot.
+        """
+        job = self._jobs[job_id]
+        raw = job.get_status()["status"]
+        if raw == JobStatus.DELETED:
+            return
+        now = datetime.now()
+        if job._shared_state is not None:
+            update_job_state(
+                job._shared_state,
+                status=JobStatus.STOPPED,
+                description=DESCRIPTION_JOB_STOPPED,
+            )
+        self._job_terminal_at[job_id] = now
+        self._job_completed_times[job_id] = now
+        snap = job.get_status()
+        progress_val = int(snap.get("progress", 0))
+        desc = snap.get("description") or DESCRIPTION_JOB_STOPPED
+        started_at = self._job_started_times.get(job_id)
+        record = JobRecord(
+            job_id=job_id,
+            status=JobStatus.STOPPED,
+            progress=progress_val,
+            description=str(desc) if desc is not None else DESCRIPTION_JOB_STOPPED,
+            result=snap.get("result"),
+            created_at=created_at,
+            updated_at=now,
+            started_at=started_at,
+            completed_at=now,
+        )
+        self.registry.append(record)
+
     def stop_job(self, job_id: JobId, timeout: Optional[float] = None) -> None:
         """
-        Request graceful STOP and wait up to timeout.
+        Request graceful STOP, wait up to timeout, and persist STOPPED.
+
+        Running jobs receive STOP via ``stop_process``; the queue then forces
+        authoritative STOPPED state (including over a late COMPLETED race).
+        Pending or INTERRUPTED (not running) jobs are cancelled to STOPPED.
+        Terminal jobs raise ``InvalidJobStateError``.
 
         Args:
             job_id: Job identifier to stop.
@@ -468,20 +523,42 @@ class JobQueue(JobQueueMetricsMixin):
 
         Raises:
             JobNotFoundError: If job is not found.
+            InvalidJobStateError: If the job is already in a terminal state.
             ProcessControlError: If stop fails.
         """
         if job_id not in self._jobs:
             raise JobNotFoundError(job_id)
 
         job = self._jobs[job_id]
+        created_at = self._job_creation_times.get(job_id, datetime.now())
 
-        if not job.is_running():
-            return  # Job not running, nothing to stop
+        if job.is_running():
+            try:
+                job.stop_process(timeout=timeout)
+            except ProcessControlError as e:
+                raise ProcessControlError(job_id, "stop", e) from e
+            self._finalize_stop_authoritative(job_id, created_at)
+            return
 
-        try:
-            job.stop_process(timeout=timeout)
-        except ProcessControlError as e:
-            raise ProcessControlError(job_id, "stop", e)
+        current = job.get_status()["status"]
+        if current in (JobStatus.PENDING, JobStatus.INTERRUPTED):
+            if job._shared_state is not None:
+                update_job_state(
+                    job._shared_state,
+                    status=JobStatus.STOPPED,
+                    description=DESCRIPTION_JOB_STOPPED,
+                )
+            self._finalize_stop_authoritative(job_id, created_at)
+            return
+
+        if current == JobStatus.RUNNING and not job.is_running():
+            self._finalize_stop_authoritative(job_id, created_at)
+            return
+
+        if is_terminal_job_status(current):
+            raise InvalidJobStateError(job_id, public_status_name(current), "stop")
+
+        raise InvalidJobStateError(job_id, current.name, "stop")
 
     def suspend_job(self, job_id: JobId) -> None:
         """

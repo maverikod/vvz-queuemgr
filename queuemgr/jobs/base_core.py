@@ -16,10 +16,16 @@ from typing import Dict, Any, Optional, Union, List, Type
 from queuemgr.core.registry import JsonlRegistry
 from queuemgr.core.types import JobId, JobStatus, JobCommand
 from queuemgr.core.ipc import (
+    atomic_finalize_after_execute,
+    atomic_try_set_status_error,
     get_command,
     update_job_state,
     read_job_state,
     set_command,
+)
+from queuemgr.constants import (
+    DESCRIPTION_JOB_DELETED,
+    DESCRIPTION_JOB_STOPPED,
 )
 from queuemgr.exceptions import ValidationError, ProcessControlError
 from .log_capture import LogCapture
@@ -188,7 +194,7 @@ class QueueJobBase(ABC):
             # If shared state is available, try to update error status
             if shared_state is not None:
                 try:
-                    update_job_state(shared_state, status=JobStatus.ERROR)
+                    atomic_try_set_status_error(shared_state, description=str(exc))
                 except Exception:  # pylint: disable=broad-except
                     pass  # Ignore errors when updating error status
             raise ProcessControlError(
@@ -344,7 +350,7 @@ class QueueJobBase(ABC):
                         self._handle_error(delete_error)
                     return
 
-            # Handle completion
+            # Handle completion (atomic vs STOP/DELETE race with parent process)
             try:
                 self._handle_completion()
             except Exception as completion_error:  # pylint: disable=broad-except
@@ -371,7 +377,11 @@ class QueueJobBase(ABC):
         try:
             self.on_stop()
             if self._shared_state is not None:
-                update_job_state(self._shared_state, status=JobStatus.STOPPED)
+                update_job_state(
+                    self._shared_state,
+                    status=JobStatus.STOPPED,
+                    description=DESCRIPTION_JOB_STOPPED,
+                )
         except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             self._handle_error(e)
 
@@ -380,7 +390,11 @@ class QueueJobBase(ABC):
         try:
             self.on_stop()
             if self._shared_state is not None:
-                update_job_state(self._shared_state, status=JobStatus.DELETED)
+                update_job_state(
+                    self._shared_state,
+                    status=JobStatus.DELETED,
+                    description=DESCRIPTION_JOB_DELETED,
+                )
         except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             self._handle_error(e)
 
@@ -389,7 +403,11 @@ class QueueJobBase(ABC):
         try:
             self.on_end()
             if self._shared_state is not None:
-                update_job_state(self._shared_state, status=JobStatus.COMPLETED)
+                outcome = atomic_finalize_after_execute(self._shared_state)
+                if outcome == "stop":
+                    self._handle_stop()
+                elif outcome == "delete":
+                    self._handle_delete()
         except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             self._handle_error(e)
 
@@ -399,7 +417,10 @@ class QueueJobBase(ABC):
             self.error = exc
             self.on_error(exc)
             if self._shared_state is not None:
-                update_job_state(self._shared_state, status=JobStatus.ERROR)
+                if not atomic_try_set_status_error(
+                    self._shared_state, description=str(exc)
+                ):
+                    return
         except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             # If error handling fails, just set the error
             self.error = e

@@ -126,14 +126,28 @@ class TestJobQueueOperations:
             queue.stop_job("non-existent")
 
     def test_stop_job_not_running(self):
-        """Test stopping job that is not running."""
+        """Test stopping a pending job marks STOPPED and records terminal metadata."""
         queue = JobQueue()
 
         # Add test job
         queue.add_job(TestJob, "test-job-1", {})
 
-        # Should not raise exception
         queue.stop_job("test-job-1")
+
+        assert queue.get_job_status("test-job-1").status == JobStatus.STOPPED
+        assert queue._job_completed_times.get("test-job-1") is not None
+
+    def test_stop_job_invalid_when_terminal_completed(self):
+        """Stopping an already completed job raises InvalidJobStateError."""
+        from queuemgr.core.ipc_operations import update_job_state
+
+        queue = JobQueue()
+        queue.add_job(TestJob, "done-job", {})
+        job = queue._jobs["done-job"]
+        update_job_state(job._shared_state, status=JobStatus.COMPLETED)
+
+        with pytest.raises(InvalidJobStateError):
+            queue.stop_job("done-job")
 
     def test_stop_job_success(self):
         """Test successful job stop."""

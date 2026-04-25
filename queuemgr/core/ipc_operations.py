@@ -9,7 +9,8 @@ email: vasilyvz@gmail.com
 """
 
 from contextlib import contextmanager
-from typing import Dict, Any, Generator, Optional, Union, List
+from typing import Dict, Any, Generator, List, Literal, Optional, Union
+
 from .types import JobCommand, JobStatus
 
 
@@ -348,4 +349,93 @@ def get_progress(shared_state: Dict[str, Any]) -> int:
             lock.release()
         except (BrokenPipeError, ConnectionResetError):
             # Process is shutting down, ignore
+            pass
+
+
+def atomic_finalize_after_execute(
+    shared_state: Dict[str, Any],
+) -> Literal["completed", "stop", "delete", "noop_terminal"]:
+    """
+    Atomically complete the job or defer to stop/delete handling.
+
+    Writes COMPLETED only when status is not already a user terminal state and
+    the pending command is not STOP/DELETE, closing the race where the parent
+    sets STOP after execute() returns but before status is updated.
+
+    Args:
+        shared_state: Job shared IPC dictionary.
+
+    Returns:
+        ``completed`` if COMPLETED was written; ``stop`` or ``delete`` if the
+        corresponding handler should run; ``noop_terminal`` if the job is
+        already STOPPED, DELETED, or INTERRUPTED.
+    """
+    lock = shared_state.get("lock")
+    if lock is None:
+        raise ValueError("Shared state must contain a 'lock' key")
+
+    try:
+        lock.acquire()
+        try:
+            status = JobStatus(shared_state["status"].value)
+            command = JobCommand(shared_state["command"].value)
+            if status in (
+                JobStatus.STOPPED,
+                JobStatus.DELETED,
+                JobStatus.INTERRUPTED,
+            ):
+                return "noop_terminal"
+            if command == JobCommand.STOP:
+                return "stop"
+            if command == JobCommand.DELETE:
+                return "delete"
+            shared_state["status"].value = JobStatus.COMPLETED.value
+            return "completed"
+        except (BrokenPipeError, ConnectionResetError):
+            return "noop_terminal"
+    finally:
+        try:
+            lock.release()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+def atomic_try_set_status_error(
+    shared_state: Dict[str, Any],
+    description: Optional[str] = None,
+) -> bool:
+    """
+    Set ERROR unless the job is already STOPPED, DELETED, or INTERRUPTED.
+
+    Args:
+        shared_state: Job shared IPC dictionary.
+        description: Optional UTF-8 description (stored encoded).
+
+    Returns:
+        True if ERROR was written; False if a stronger terminal state wins.
+    """
+    lock = shared_state.get("lock")
+    if lock is None:
+        raise ValueError("Shared state must contain a 'lock' key")
+
+    try:
+        lock.acquire()
+        try:
+            status = JobStatus(shared_state["status"].value)
+            if status in (
+                JobStatus.STOPPED,
+                JobStatus.DELETED,
+                JobStatus.INTERRUPTED,
+            ):
+                return False
+            shared_state["status"].value = JobStatus.ERROR.value
+            if description is not None:
+                shared_state["description"].value = description.encode("utf-8")
+            return True
+        except (BrokenPipeError, ConnectionResetError):
+            return False
+    finally:
+        try:
+            lock.release()
+        except (BrokenPipeError, ConnectionResetError):
             pass

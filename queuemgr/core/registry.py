@@ -154,9 +154,15 @@ class JsonlRegistry(Registry):
         if "completed_at" in data and data["completed_at"] is not None:
             completed_at = datetime.fromisoformat(data["completed_at"])
 
+        raw_status = int(data["status"])
+        if raw_status == JobStatus.INTERRUPTED.value:
+            status_enum = JobStatus.STOPPED
+        else:
+            status_enum = JobStatus(raw_status)
+
         return JobRecord(
             job_id=data["job_id"],
-            status=JobStatus(data["status"]),
+            status=status_enum,
             progress=data["progress"],
             description=data["description"],
             result=data["result"],

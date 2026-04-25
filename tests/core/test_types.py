@@ -7,7 +7,13 @@ email: vasilyvz@gmail.com
 
 import pytest
 from datetime import datetime
-from queuemgr.core.types import JobStatus, JobCommand, JobRecord
+from queuemgr.core.types import (
+    JobStatus,
+    JobCommand,
+    JobRecord,
+    normalize_public_job_status,
+    public_status_name,
+)
 
 
 class TestJobStatus:
@@ -20,6 +26,8 @@ class TestJobStatus:
         assert JobStatus.COMPLETED == 2
         assert JobStatus.ERROR == 3
         assert JobStatus.INTERRUPTED == 4
+        assert JobStatus.STOPPED == 5
+        assert JobStatus.DELETED == 6
 
     def test_job_status_names(self):
         """Test JobStatus enum names."""
@@ -28,6 +36,17 @@ class TestJobStatus:
         assert JobStatus.COMPLETED.name == "COMPLETED"
         assert JobStatus.ERROR.name == "ERROR"
         assert JobStatus.INTERRUPTED.name == "INTERRUPTED"
+        assert JobStatus.STOPPED.name == "STOPPED"
+        assert JobStatus.DELETED.name == "DELETED"
+
+    def test_normalize_public_job_status_maps_interrupted(self) -> None:
+        """Legacy INTERRUPTED is reported as STOPPED for public APIs."""
+        assert normalize_public_job_status(JobStatus.INTERRUPTED) == JobStatus.STOPPED
+        assert normalize_public_job_status(JobStatus.STOPPED) == JobStatus.STOPPED
+
+    def test_public_status_name_maps_interrupted(self) -> None:
+        """public_status_name uses STOPPED for INTERRUPTED."""
+        assert public_status_name(JobStatus.INTERRUPTED) == "STOPPED"
 
 
 class TestJobCommand:

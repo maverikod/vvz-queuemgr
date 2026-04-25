@@ -11,6 +11,8 @@ email: vasilyvz@gmail.com
 # Import all functionality from separate modules
 from .ipc_manager import get_manager, create_job_shared_state
 from .ipc_operations import (
+    atomic_finalize_after_execute,
+    atomic_try_set_status_error,
     with_job_lock,
     update_job_state,
     read_job_state,
@@ -35,4 +37,6 @@ __all__ = [
     "set_status",
     "set_progress",
     "get_progress",
+    "atomic_finalize_after_execute",
+    "atomic_try_set_status_error",
 ]

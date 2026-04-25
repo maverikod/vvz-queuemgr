@@ -79,3 +79,31 @@ class JobRecord:
 
         if self.created_at > self.updated_at:
             raise ValueError("created_at must be before or equal to updated_at")
+
+
+def normalize_public_job_status(status: JobStatus) -> JobStatus:
+    """
+    Map legacy INTERRUPTED to STOPPED for API and persistence compatibility.
+
+    Args:
+        status: Raw job status from IPC or an in-memory job.
+
+    Returns:
+        STOPPED when status is INTERRUPTED; otherwise the input unchanged.
+    """
+    if status == JobStatus.INTERRUPTED:
+        return JobStatus.STOPPED
+    return status
+
+
+def public_status_name(status: JobStatus) -> str:
+    """
+    Return the stable IPC status name (INTERRUPTED is reported as STOPPED).
+
+    Args:
+        status: Current job status.
+
+    Returns:
+        Uppercase enum name suitable for JSON serialization.
+    """
+    return normalize_public_job_status(status).name

@@ -182,10 +182,12 @@ class QueueStopJobCommand(_QueueCommandBase):
         queue = self._get_queue()
         job_id = params.get("job_id")
         await queue.stop_job(job_id)
+        status_payload = await queue.get_job_status(job_id)
+        status_name = str(status_payload.get("status", "")).casefold()
         return {
             "message": f"Job {job_id} stopped successfully",
             "job_id": job_id,
-            "status": "stopped",
+            "status": status_name,
         }
 
 

@@ -267,3 +267,50 @@ class TestConcurrency:
         state = read_job_state(shared_state)
         assert 0 <= state["progress"] <= 100
         assert state["description"].startswith("Worker")
+
+
+class TestAtomicTerminalTransitions:
+    """Atomic completion/error transitions for cooperative stop races."""
+
+    def test_atomic_finalize_writes_completed_when_allowed(self) -> None:
+        """COMPLETED is written when no STOP/DELETE is pending."""
+        from queuemgr.core.ipc import atomic_finalize_after_execute
+
+        manager = get_manager()
+        shared_state = create_job_shared_state(manager)
+        update_job_state(
+            shared_state, status=JobStatus.RUNNING, command=JobCommand.START
+        )
+        assert atomic_finalize_after_execute(shared_state) == "completed"
+        assert read_job_state(shared_state)["status"] == JobStatus.COMPLETED
+
+    def test_atomic_finalize_returns_stop_when_command_pending(self) -> None:
+        """When STOP is pending, finalize defers to the stop handler path."""
+        from queuemgr.core.ipc import atomic_finalize_after_execute
+
+        manager = get_manager()
+        shared_state = create_job_shared_state(manager)
+        update_job_state(
+            shared_state, status=JobStatus.RUNNING, command=JobCommand.STOP
+        )
+        assert atomic_finalize_after_execute(shared_state) == "stop"
+        assert read_job_state(shared_state)["status"] == JobStatus.RUNNING
+
+    def test_atomic_finalize_noop_when_deleted(self) -> None:
+        """DELETED is not overwritten by completion."""
+        from queuemgr.core.ipc import atomic_finalize_after_execute
+
+        manager = get_manager()
+        shared_state = create_job_shared_state(manager)
+        update_job_state(shared_state, status=JobStatus.DELETED)
+        assert atomic_finalize_after_execute(shared_state) == "noop_terminal"
+
+    def test_atomic_error_skips_when_stopped(self) -> None:
+        """ERROR must not replace STOPPED."""
+        from queuemgr.core.ipc import atomic_try_set_status_error
+
+        manager = get_manager()
+        shared_state = create_job_shared_state(manager)
+        update_job_state(shared_state, status=JobStatus.STOPPED)
+        assert not atomic_try_set_status_error(shared_state, description="err")
+        assert read_job_state(shared_state)["status"] == JobStatus.STOPPED
