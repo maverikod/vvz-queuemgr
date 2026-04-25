@@ -20,9 +20,10 @@ class JobStatus(IntEnum):
     RUNNING = 1
     COMPLETED = 2
     ERROR = 3
+    STOPPED = 4
+    DELETED = 5
+    # Backward compatibility alias for legacy serialized values/names.
     INTERRUPTED = 4
-    STOPPED = 5
-    DELETED = 6
 
 
 class JobCommand(IntEnum):

@@ -368,7 +368,7 @@ def atomic_finalize_after_execute(
     Returns:
         ``completed`` if COMPLETED was written; ``stop`` or ``delete`` if the
         corresponding handler should run; ``noop_terminal`` if the job is
-        already STOPPED, DELETED, or INTERRUPTED.
+        already STOPPED or DELETED.
     """
     lock = shared_state.get("lock")
     if lock is None:
@@ -379,11 +379,7 @@ def atomic_finalize_after_execute(
         try:
             status = JobStatus(shared_state["status"].value)
             command = JobCommand(shared_state["command"].value)
-            if status in (
-                JobStatus.STOPPED,
-                JobStatus.DELETED,
-                JobStatus.INTERRUPTED,
-            ):
+            if status in (JobStatus.STOPPED, JobStatus.DELETED):
                 return "noop_terminal"
             if command == JobCommand.STOP:
                 return "stop"
@@ -405,7 +401,7 @@ def atomic_try_set_status_error(
     description: Optional[str] = None,
 ) -> bool:
     """
-    Set ERROR unless the job is already STOPPED, DELETED, or INTERRUPTED.
+    Set ERROR unless the job is already STOPPED or DELETED.
 
     Args:
         shared_state: Job shared IPC dictionary.
@@ -422,11 +418,7 @@ def atomic_try_set_status_error(
         lock.acquire()
         try:
             status = JobStatus(shared_state["status"].value)
-            if status in (
-                JobStatus.STOPPED,
-                JobStatus.DELETED,
-                JobStatus.INTERRUPTED,
-            ):
+            if status in (JobStatus.STOPPED, JobStatus.DELETED):
                 return False
             shared_state["status"].value = JobStatus.ERROR.value
             if description is not None:

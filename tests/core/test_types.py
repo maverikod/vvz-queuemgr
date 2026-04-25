@@ -25,9 +25,9 @@ class TestJobStatus:
         assert JobStatus.RUNNING == 1
         assert JobStatus.COMPLETED == 2
         assert JobStatus.ERROR == 3
-        assert JobStatus.INTERRUPTED == 4
-        assert JobStatus.STOPPED == 5
-        assert JobStatus.DELETED == 6
+        assert JobStatus.STOPPED == 4
+        assert JobStatus.DELETED == 5
+        assert JobStatus.INTERRUPTED == JobStatus.STOPPED
 
     def test_job_status_names(self):
         """Test JobStatus enum names."""
@@ -35,7 +35,6 @@ class TestJobStatus:
         assert JobStatus.RUNNING.name == "RUNNING"
         assert JobStatus.COMPLETED.name == "COMPLETED"
         assert JobStatus.ERROR.name == "ERROR"
-        assert JobStatus.INTERRUPTED.name == "INTERRUPTED"
         assert JobStatus.STOPPED.name == "STOPPED"
         assert JobStatus.DELETED.name == "DELETED"
 
@@ -47,6 +46,12 @@ class TestJobStatus:
     def test_public_status_name_maps_interrupted(self) -> None:
         """public_status_name uses STOPPED for INTERRUPTED."""
         assert public_status_name(JobStatus.INTERRUPTED) == "STOPPED"
+
+    def test_job_status_enum_has_stopped_deleted(self) -> None:
+        """STOPPED/DELETED are authoritative and legacy value 4 maps to STOPPED."""
+        assert hasattr(JobStatus, "STOPPED")
+        assert hasattr(JobStatus, "DELETED")
+        assert JobStatus(4) == JobStatus.STOPPED
 
 
 class TestJobCommand:

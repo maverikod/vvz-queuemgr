@@ -403,6 +403,17 @@ class QueueJobBase(ABC):
         try:
             self.on_end()
             if self._shared_state is not None:
+                current_state = read_job_state(self._shared_state)
+                if current_state["status"] in (JobStatus.STOPPED, JobStatus.DELETED):
+                    return
+                native_error_message = self._extract_native_error_message(
+                    current_state.get("result")
+                )
+                if native_error_message is not None:
+                    atomic_try_set_status_error(
+                        self._shared_state, description=native_error_message
+                    )
+                    return
                 outcome = atomic_finalize_after_execute(self._shared_state)
                 if outcome == "stop":
                     self._handle_stop()
@@ -417,6 +428,9 @@ class QueueJobBase(ABC):
             self.error = exc
             self.on_error(exc)
             if self._shared_state is not None:
+                current_state = read_job_state(self._shared_state)
+                if current_state["status"] in (JobStatus.STOPPED, JobStatus.DELETED):
+                    return
                 if not atomic_try_set_status_error(
                     self._shared_state, description=str(exc)
                 ):
@@ -424,6 +438,33 @@ class QueueJobBase(ABC):
         except (OSError, IOError, ValueError, TimeoutError, ProcessControlError) as e:
             # If error handling fails, just set the error
             self.error = e
+
+    @staticmethod
+    def _extract_native_error_message(
+        result: Union[str, int, float, bool, Dict[str, Any], List[Any], None]
+    ) -> Optional[str]:
+        """
+        Detect native execute() payloads that represent command-level failure.
+
+        Args:
+            result: Current shared-state result payload.
+
+        Returns:
+            Error summary when payload means failure, else None.
+        """
+        if not isinstance(result, dict):
+            return None
+
+        raw_status = result.get("status")
+        if isinstance(raw_status, str) and raw_status.lower() in {"error", "failed"}:
+            msg = result.get("message")
+            return str(msg) if msg is not None else f"Native job returned status={raw_status}"
+
+        if result.get("success") is False:
+            msg = result.get("error") or result.get("message")
+            return str(msg) if msg is not None else "Native job returned success=false"
+
+        return None
 
     def _write_to_registry(self) -> None:
         """Write job state to registry."""

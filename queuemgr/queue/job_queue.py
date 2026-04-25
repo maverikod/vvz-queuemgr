@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
-from queuemgr.constants import DESCRIPTION_JOB_STOPPED
+from queuemgr.constants import DESCRIPTION_JOB_DELETED, DESCRIPTION_JOB_STOPPED
 from queuemgr.core.types import (
     JobId,
     JobRecord,
@@ -87,31 +87,36 @@ class JobQueue(JobQueueMetricsMixin):
         self.completed_job_retention_seconds = completed_job_retention_seconds
         self.max_retained_terminal_jobs = max_retained_terminal_jobs
 
-        term = (
-            float(terminal_job_retention_seconds)
-            if terminal_job_retention_seconds is not None
-            else 3600.0
-        )
-        failed = (
-            float(failed_terminal_retention_seconds)
-            if failed_terminal_retention_seconds is not None
-            else 86400.0
-        )
         if completed_job_retention_seconds is not None:
-            term = float(completed_job_retention_seconds)
-            failed = float(completed_job_retention_seconds)
-        self._retention_ttl_completed = term
-        self._retention_ttl_failed = failed
-        self._retention_ttl_stopped = (
-            float(stopped_terminal_retention_seconds)
-            if stopped_terminal_retention_seconds is not None
-            else term
-        )
-        self._retention_ttl_deleted = (
-            float(deleted_terminal_retention_seconds)
-            if deleted_terminal_retention_seconds is not None
-            else term
-        )
+            completed_ttl: Optional[float] = float(completed_job_retention_seconds)
+            failed_ttl: Optional[float] = float(completed_job_retention_seconds)
+            stopped_ttl: Optional[float] = float(completed_job_retention_seconds)
+            deleted_ttl: Optional[float] = float(completed_job_retention_seconds)
+        else:
+            completed_ttl = (
+                float(terminal_job_retention_seconds)
+                if terminal_job_retention_seconds is not None
+                else None
+            )
+            failed_ttl = (
+                float(failed_terminal_retention_seconds)
+                if failed_terminal_retention_seconds is not None
+                else completed_ttl
+            )
+            stopped_ttl = (
+                float(stopped_terminal_retention_seconds)
+                if stopped_terminal_retention_seconds is not None
+                else completed_ttl
+            )
+            deleted_ttl = (
+                float(deleted_terminal_retention_seconds)
+                if deleted_terminal_retention_seconds is not None
+                else completed_ttl
+            )
+        self._retention_ttl_completed = completed_ttl
+        self._retention_ttl_failed = failed_ttl
+        self._retention_ttl_stopped = stopped_ttl
+        self._retention_ttl_deleted = deleted_ttl
 
         load_jobs_from_registry(
             registry=self.registry,
@@ -416,15 +421,20 @@ class JobQueue(JobQueueMetricsMixin):
         self._job_terminal_at[job_id] = now
         self._job_completed_times[job_id] = now
 
-        progress_val = int(job.get_status().get("progress", 0))
+        status_snapshot = job.get_status()
+        progress_val = int(status_snapshot.get("progress", 0))
+        result_payload = status_snapshot.get("result")
+        started_at = self._job_started_times.get(job_id)
         deletion_record = JobRecord(
             job_id=job_id,
             status=JobStatus.DELETED,
             progress=progress_val,
-            description="Job deleted",
-            result=None,
+            description=DESCRIPTION_JOB_DELETED,
+            result=result_payload,
             created_at=created_at,
             updated_at=now,
+            started_at=started_at,
+            completed_at=now,
         )
         self.registry.append(deletion_record)
 
@@ -541,7 +551,7 @@ class JobQueue(JobQueueMetricsMixin):
             return
 
         current = job.get_status()["status"]
-        if current in (JobStatus.PENDING, JobStatus.INTERRUPTED):
+        if current == JobStatus.PENDING:
             if job._shared_state is not None:
                 update_job_state(
                     job._shared_state,
