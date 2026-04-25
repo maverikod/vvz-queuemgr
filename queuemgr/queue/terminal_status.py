@@ -35,7 +35,9 @@ def is_terminal_job_status(status: JobStatus) -> bool:
     return status in TERMINAL_JOB_STATUSES
 
 
-def derive_command_success_fields(result: Any) -> Dict[str, Any]:
+def derive_command_success_fields(
+    result: Any, outer_status: Optional[JobStatus] = None
+) -> Dict[str, Any]:
     """
     Derive explicit command-level success flags from a job result payload.
 
@@ -48,11 +50,37 @@ def derive_command_success_fields(result: Any) -> Dict[str, Any]:
         Extra fields to merge into a status dict (empty when not applicable).
     """
     inner_success, reason = _extract_inner_command_success(result)
+    if outer_status in (JobStatus.STOPPED, JobStatus.DELETED):
+        if inner_success is None:
+            return {
+                "command_success": False,
+                "inner_success": False,
+                "completed_with_error": True,
+                "command_error_summary": "Job stopped before command completion",
+            }
+        if inner_success:
+            return {
+                "command_success": False,
+                "inner_success": False,
+                "completed_with_error": True,
+                "command_error_summary": "Job stopped before command completion",
+            }
+        # Keep already-failed inner status unchanged.
+        out: Dict[str, Any] = {
+            "command_success": False,
+            "inner_success": False,
+            "completed_with_error": True,
+        }
+        if reason is not None:
+            out["command_error_summary"] = reason
+        return out
+
     if inner_success is None:
         return {}
 
     out: Dict[str, Any] = {
         "command_success": inner_success,
+        "inner_success": inner_success,
         "completed_with_error": not inner_success,
     }
     if reason is not None:

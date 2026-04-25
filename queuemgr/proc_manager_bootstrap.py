@@ -159,7 +159,9 @@ def process_proc_command(
             jt = queue.get_job_type_name(job_id)
             if jt:
                 result["job_type"] = jt
-            result.update(derive_command_success_fields(status.result))
+            result.update(
+                derive_command_success_fields(status.result, outer_status=status.status)
+            )
             return {"status": "success", "result": result}
 
         if command == "list_jobs":

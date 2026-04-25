@@ -57,8 +57,17 @@ class TestDeriveCommandSuccess:
         payload = {"command": {"result": {"success": False, "error": "e"}}}
         extra = derive_command_success_fields(payload)
         assert extra["command_success"] is False
+        assert extra["inner_success"] is False
         assert extra["completed_with_error"] is True
         assert "command_error_summary" in extra
+
+    def test_stopped_outer_status_overrides_inner_success_true(self) -> None:
+        """STOPPED outer status must not expose successful inner command result."""
+        payload = {"command": {"result": {"success": True}}}
+        extra = derive_command_success_fields(payload, outer_status=JobStatus.STOPPED)
+        assert extra["command_success"] is False
+        assert extra["inner_success"] is False
+        assert extra["completed_with_error"] is True
 
 
 class TestTerminalJobRetention:

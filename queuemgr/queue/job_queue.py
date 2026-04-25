@@ -81,6 +81,7 @@ class JobQueue(JobQueueMetricsMixin):
         self._job_started_times: Dict[JobId, datetime] = {}
         self._job_completed_times: Dict[JobId, datetime] = {}
         self._job_terminal_at: Dict[JobId, datetime] = {}
+        self._job_stop_requested_at: Dict[JobId, datetime] = {}
         self._job_types: Dict[JobId, str] = {}
         self.max_queue_size = max_queue_size
         self.per_job_type_limits = per_job_type_limits or {}
@@ -152,6 +153,7 @@ class JobQueue(JobQueueMetricsMixin):
         self._job_started_times.pop(job_id, None)
         self._job_completed_times.pop(job_id, None)
         self._job_terminal_at.pop(job_id, None)
+        self._job_stop_requested_at.pop(job_id, None)
         self._job_types.pop(job_id, None)
 
     def _evict_oldest_terminal_job(self) -> bool:
@@ -502,6 +504,10 @@ class JobQueue(JobQueueMetricsMixin):
         self._job_terminal_at[job_id] = now
         self._job_completed_times[job_id] = now
         snap = job.get_status()
+        normalized_result = self._normalize_stopped_result_payload(snap.get("result"))
+        if job._shared_state is not None and normalized_result != snap.get("result"):
+            update_job_state(job._shared_state, result=normalized_result)
+            snap = job.get_status()
         progress_val = int(snap.get("progress", 0))
         desc = snap.get("description") or DESCRIPTION_JOB_STOPPED
         started_at = self._job_started_times.get(job_id)
@@ -510,13 +516,77 @@ class JobQueue(JobQueueMetricsMixin):
             status=JobStatus.STOPPED,
             progress=progress_val,
             description=str(desc) if desc is not None else DESCRIPTION_JOB_STOPPED,
-            result=snap.get("result"),
+            result=normalized_result,
             created_at=created_at,
             updated_at=now,
             started_at=started_at,
             completed_at=now,
         )
         self.registry.append(record)
+
+    @staticmethod
+    def _normalize_stopped_result_payload(result: Any) -> Any:
+        """
+        Normalize retained STOPPED results so they cannot look completed-successful.
+
+        Args:
+            result: Current result payload.
+
+        Returns:
+            Updated payload describing interruption when needed.
+        """
+        if not isinstance(result, dict):
+            return {
+                "status": "stopped",
+                "interrupted": True,
+                "success": False,
+                "original_result": result,
+            }
+
+        normalized = dict(result)
+        status_val = normalized.get("status")
+        if isinstance(status_val, str) and status_val.lower() == "completed":
+            normalized["status"] = "stopped"
+        normalized["interrupted"] = True
+
+        if normalized.get("success") is True:
+            normalized["success"] = False
+
+        inner = normalized.get("result")
+        if isinstance(inner, dict):
+            inner_copy = dict(inner)
+            if inner_copy.get("success") is True:
+                inner_copy["success"] = False
+            inner_copy.setdefault("status", "stopped")
+            inner_copy.setdefault("interrupted", True)
+            normalized["result"] = inner_copy
+
+        return normalized
+
+    def _attempt_force_stop(self, job: QueueJobBase, timeout: float) -> bool:
+        """
+        Force-stop a job process when cooperative STOP does not finish in time.
+
+        Args:
+            job: Job instance to terminate.
+            timeout: Maximum wait for each terminate phase (seconds).
+
+        Returns:
+            True when process is no longer alive, otherwise False.
+        """
+        phase_timeout = min(max(timeout / 2.0, 0.2), 2.0)
+        try:
+            job.terminate_process(force=False)
+            if job._process is not None:
+                job._process.join(timeout=phase_timeout)
+            if not job.is_running():
+                return True
+            job.terminate_process(force=True)
+            if job._process is not None:
+                job._process.join(timeout=phase_timeout)
+            return not job.is_running()
+        except ProcessControlError:
+            return False
 
     def stop_job(self, job_id: JobId, timeout: Optional[float] = None) -> None:
         """
@@ -541,17 +611,37 @@ class JobQueue(JobQueueMetricsMixin):
 
         job = self._jobs[job_id]
         created_at = self._job_creation_times.get(job_id, datetime.now())
+        wait_timeout = float(timeout) if timeout is not None else 10.0
 
         if job.is_running():
+            self._job_stop_requested_at[job_id] = datetime.now()
             try:
-                job.stop_process(timeout=timeout)
+                job.stop_process(timeout=wait_timeout)
             except ProcessControlError as e:
-                raise ProcessControlError(job_id, "stop", e) from e
-            self._finalize_stop_authoritative(job_id, created_at)
-            return
+                if not self._attempt_force_stop(job, timeout=wait_timeout):
+                    raise ProcessControlError(job_id, "stop", e) from e
+
+            state_after_stop = job.get_status()
+            raw_after_stop = state_after_stop["status"]
+            if raw_after_stop in (JobStatus.STOPPED, JobStatus.DELETED):
+                if raw_after_stop == JobStatus.STOPPED:
+                    self._finalize_stop_authoritative(job_id, created_at)
+                return
+
+            # Truthful semantics: do not claim STOPPED when job already finalized.
+            if raw_after_stop in (JobStatus.COMPLETED, JobStatus.ERROR):
+                raise InvalidJobStateError(
+                    job_id, public_status_name(raw_after_stop), "stop"
+                )
+
+            if not job.is_running():
+                self._finalize_stop_authoritative(job_id, created_at)
+                return
+            raise ProcessControlError(job_id, "stop", "Job is still running")
 
         current = job.get_status()["status"]
         if current == JobStatus.PENDING:
+            self._job_stop_requested_at[job_id] = datetime.now()
             if job._shared_state is not None:
                 update_job_state(
                     job._shared_state,
@@ -562,8 +652,8 @@ class JobQueue(JobQueueMetricsMixin):
             return
 
         if current == JobStatus.RUNNING and not job.is_running():
-            self._finalize_stop_authoritative(job_id, created_at)
-            return
+            final_state = job.get_status()["status"]
+            raise InvalidJobStateError(job_id, public_status_name(final_state), "stop")
 
         if is_terminal_job_status(current):
             raise InvalidJobStateError(job_id, public_status_name(current), "stop")
@@ -615,4 +705,5 @@ class JobQueue(JobQueueMetricsMixin):
         self._job_started_times.clear()
         self._job_completed_times.clear()
         self._job_terminal_at.clear()
+        self._job_stop_requested_at.clear()
         self._job_types.clear()

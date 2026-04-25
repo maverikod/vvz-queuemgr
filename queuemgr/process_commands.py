@@ -77,7 +77,9 @@ def process_command(
         jt = job_queue.get_job_type_name(job_id)
         if jt:
             result["job_type"] = jt
-        result.update(derive_command_success_fields(record.result))
+        result.update(
+            derive_command_success_fields(record.result, outer_status=record.status)
+        )
         return result
 
     elif command == "list_jobs":

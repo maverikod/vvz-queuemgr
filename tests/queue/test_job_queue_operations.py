@@ -57,7 +57,7 @@ class TestJobQueueOperations:
         # Mock job as already running
         job = queue._jobs["test-job-1"]
         job._process = Mock()
-        job._process.is_alive.return_value = True
+        job._process.is_alive.side_effect = [True, False]
 
         with pytest.raises(InvalidJobStateError):
             queue.start_job("test-job-1")
@@ -72,7 +72,7 @@ class TestJobQueueOperations:
         # Mock job as running
         job = queue._jobs["test-job-1"]
         job._process = Mock()
-        job._process.is_alive.return_value = True
+        job._process.is_alive.side_effect = [True, False]
 
         with pytest.raises(InvalidJobStateError):
             queue.start_job("test-job-1")
@@ -159,7 +159,7 @@ class TestJobQueueOperations:
         # Mock job as running
         job = queue._jobs["test-job-1"]
         job._process = Mock()
-        job._process.is_alive.return_value = True
+        job._process.is_alive.side_effect = [True, False]
 
         # Mock job stop
         with patch.object(job, "stop_process") as mock_stop:

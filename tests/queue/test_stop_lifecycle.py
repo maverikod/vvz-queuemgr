@@ -13,10 +13,11 @@ from datetime import datetime, timedelta
 import pytest
 
 from queuemgr.core.ipc import create_job_shared_state, get_manager, read_job_state
-from queuemgr.exceptions import JobNotFoundError
+from queuemgr.core.ipc_operations import get_command
+from queuemgr.exceptions import InvalidJobStateError, JobNotFoundError
 from queuemgr.core.ipc_operations import update_job_state
 from queuemgr.core.registry import JsonlRegistry
-from queuemgr.core.types import JobStatus
+from queuemgr.core.types import JobCommand, JobStatus
 from queuemgr.jobs.base import QueueJobBase
 from queuemgr.queue.job_queue import JobQueue
 
@@ -27,6 +28,49 @@ class TightLoopJob(QueueJobBase):
     def execute(self) -> None:
         for _ in range(2000):
             time.sleep(0.005)
+
+
+class HeartbeatLongJob(QueueJobBase):
+    """Deterministic long-running job with heartbeat timestamps in result."""
+
+    def execute(self) -> None:
+        total_seconds = float(self.params.get("seconds", 10.0))
+        tick_seconds = float(self.params.get("tick_seconds", 0.2))
+        elapsed = 0.0
+        heartbeats = []
+        while elapsed < total_seconds:
+            if self._shared_state is not None:
+                command = get_command(self._shared_state)
+                if command in (JobCommand.STOP, JobCommand.DELETE):
+                    self.set_result(
+                        {
+                            "status": "stopped",
+                            "result": {
+                                "success": False,
+                                "data": {"slept_seconds": elapsed},
+                            },
+                            "heartbeats": heartbeats,
+                        }
+                    )
+                    return
+            print(f"heartbeat elapsed={elapsed:.1f}s")
+            heartbeats.append(elapsed)
+            self.set_result(
+                {
+                    "status": "running",
+                    "result": {"success": None, "data": {"slept_seconds": elapsed}},
+                    "heartbeats": heartbeats,
+                }
+            )
+            time.sleep(tick_seconds)
+            elapsed += tick_seconds
+        self.set_result(
+            {
+                "status": "completed",
+                "result": {"success": True, "data": {"slept_seconds": total_seconds}},
+                "heartbeats": heartbeats,
+            }
+        )
 
 
 class LogThenLoopJob(QueueJobBase):
@@ -52,8 +96,53 @@ class QuickCompleteJob(QueueJobBase):
         return None
 
 
+class SleepOnceJob(QueueJobBase):
+    """Short sleep job used to validate truthful stop race semantics."""
+
+    def execute(self) -> None:
+        time.sleep(0.05)
+        self.set_result(
+            {"status": "completed", "result": {"success": True, "data": {"slept": 0.05}}}
+        )
+
+
 class TestStopLifecycle:
     """Integration-style stop tests with a real child process."""
+
+    def test_stop_running_job_interrupts_before_natural_completion(self, tmp_path) -> None:
+        """Running stop interrupts before full duration and avoids completed-success."""
+        registry = JsonlRegistry(str(tmp_path / "reg-stop-interrupt.jsonl"))
+        queue = JobQueue(registry=registry)
+        queue.add_job(
+            HeartbeatLongJob, "interrupt-1", {"seconds": 6.0, "tick_seconds": 0.2}
+        )
+        queue.start_job("interrupt-1")
+
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            status = queue.get_job_status("interrupt-1")
+            if status.status == JobStatus.RUNNING and status.result is not None:
+                break
+            time.sleep(0.05)
+
+        queue.stop_job("interrupt-1", timeout=5.0)
+        final_status = queue.get_job_status("interrupt-1")
+        assert final_status.status == JobStatus.STOPPED
+        assert final_status.result is not None
+        result_payload = final_status.result
+        assert isinstance(result_payload, dict)
+        assert str(result_payload.get("status", "")).lower() != "completed"
+        inner = result_payload.get("result")
+        if isinstance(inner, dict):
+            assert inner.get("success") is not True
+            slept = inner.get("data", {}).get("slept_seconds")
+            if isinstance(slept, (int, float)):
+                assert slept < 6.0
+
+        logs = queue.get_job_logs("interrupt-1")
+        hb_lines = [line for line in logs["stdout"] if "heartbeat elapsed=" in line]
+        assert len(hb_lines) > 0
+        assert not any("elapsed=6.0s" in line for line in hb_lines)
 
     def test_stop_running_job_remains_stopped(self, tmp_path) -> None:
         """After stop_job, get_job_status must report STOPPED, not COMPLETED."""
@@ -135,6 +224,17 @@ class TestStopLifecycle:
         with pytest.raises(JobNotFoundError):
             queue.get_job_status("ret-old")
 
+    def test_stop_after_already_completed_is_truthful(self, tmp_path) -> None:
+        """stop_job must not report STOPPED when job already completed naturally."""
+        registry = JsonlRegistry(str(tmp_path / "reg-stop-race-truth.jsonl"))
+        queue = JobQueue(registry=registry)
+        queue.add_job(SleepOnceJob, "race-stop-1", {})
+        queue.start_job("race-stop-1")
+        time.sleep(0.2)
+        with pytest.raises(InvalidJobStateError):
+            queue.stop_job("race-stop-1", timeout=0.1)
+        assert queue.get_job_status("race-stop-1").status == JobStatus.COMPLETED
+
 
 class TestJobBaseTerminalGuards:
     """Direct QueueJobBase terminal precedence checks."""
@@ -149,7 +249,7 @@ class TestJobBaseTerminalGuards:
         job._handle_completion()
         assert read_job_state(shared)["status"] == JobStatus.STOPPED
 
-    def test_completion_does_not_overwrite_deleted(self) -> None:
+    def test_delete_not_overwritten_by_completion(self) -> None:
         """_handle_completion leaves DELETED unchanged."""
         manager = get_manager()
         shared = create_job_shared_state(manager)
@@ -264,3 +364,43 @@ class TestDeleteRetentionLifecycle:
                 JobStatus.DELETED,
                 JobStatus.COMPLETED,
             )
+
+    def test_retention_includes_completed_error_stopped_deleted(self, tmp_path) -> None:
+        """Retention policy keeps all terminal kinds before expiry."""
+        registry = JsonlRegistry(str(tmp_path / "reg-retention-terminals.jsonl"))
+        queue = JobQueue(
+            registry=registry,
+            completed_job_retention_seconds=None,
+            terminal_job_retention_seconds=None,
+            failed_terminal_retention_seconds=None,
+            stopped_terminal_retention_seconds=None,
+            deleted_terminal_retention_seconds=None,
+        )
+        queue.add_job(QuickCompleteJob, "keep-completed", {})
+        queue.start_job("keep-completed")
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            if queue.get_job_status("keep-completed").status == JobStatus.COMPLETED:
+                break
+            time.sleep(0.05)
+
+        queue.add_job(NativeErrorResultJob, "keep-error", {})
+        queue.start_job("keep-error")
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            if queue.get_job_status("keep-error").status == JobStatus.ERROR:
+                break
+            time.sleep(0.05)
+
+        queue.add_job(LogThenLoopJob, "keep-stopped", {})
+        queue.stop_job("keep-stopped")
+
+        queue.add_job(LogThenLoopJob, "keep-deleted", {})
+        queue.delete_job("keep-deleted", force=True)
+
+        removed = queue.cleanup_completed_jobs()
+        assert removed == 0
+        assert queue.get_job_status("keep-completed").status == JobStatus.COMPLETED
+        assert queue.get_job_status("keep-error").status == JobStatus.ERROR
+        assert queue.get_job_status("keep-stopped").status == JobStatus.STOPPED
+        assert queue.get_job_status("keep-deleted").status == JobStatus.DELETED
