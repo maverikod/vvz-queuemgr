@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from .queue.job_queue import JobQueue
 from .core.registry import JsonlRegistry
 from queuemgr.core.exceptions import ProcessControlError
+from queuemgr.mp_context import get_mp_context
 from .process_config import ProcessManagerConfig
 from .process_commands import process_command
 
@@ -58,13 +59,17 @@ class ProcessManager:
                 "manager", "start", "Process manager is already running"
             )
 
-        # Create communication queues
-        self._control_queue = Queue()
-        self._response_queue = Queue()
-        self._shutdown_event = Event()
+        # Create communication queues from the local mp context. Queue/Event
+        # objects must come from the same context as the Process below: a
+        # SemLock created under one start method may not be reconstructible
+        # in a child started with a different one.
+        mp_context = get_mp_context()
+        self._control_queue = mp_context.Queue()
+        self._response_queue = mp_context.Queue()
+        self._shutdown_event = mp_context.Event()
 
         # Start the manager process
-        self._process = Process(
+        self._process = mp_context.Process(
             target=self._manager_process,
             name="QueueManager",
             args=(

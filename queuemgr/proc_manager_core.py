@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 from .core.exceptions import ProcessControlError
+from .mp_context import get_mp_context
 from .proc_config import ProcManagerConfig
 from .proc_manager_bootstrap import run_proc_manager_process
 
@@ -66,8 +67,8 @@ class ProcManager:
             # Create proc directory
             self._proc_dir.mkdir(parents=True, exist_ok=True)
 
-            # Start manager process
-            self._process = Process(
+            # Start manager process from the local mp context.
+            self._process = get_mp_context().Process(
                 target=run_proc_manager_process,
                 args=(self.config,),
                 name="QueueManager",

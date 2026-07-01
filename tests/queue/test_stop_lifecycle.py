@@ -175,7 +175,19 @@ class TestStopLifecycle:
         queue = JobQueue(registry=registry)
         queue.add_job(LogThenLoopJob, "stop-log-1", {})
         queue.start_job("stop-log-1")
-        time.sleep(0.05)
+
+        # Wait for the child process to actually emit its log line before
+        # stopping. Under a spawn-based child this can take noticeably
+        # longer than under fork (a fresh interpreter re-imports the
+        # package), so poll with a generous deadline instead of a fixed
+        # sleep.
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            logs = queue.get_job_logs("stop-log-1")
+            if any("stop-log-line" in line for line in logs["stdout"]):
+                break
+            time.sleep(0.05)
+
         queue.stop_job("stop-log-1", timeout=15.0)
         logs = queue.get_job_logs("stop-log-1")
         assert any("stop-log-line" in line for line in logs["stdout"])
@@ -230,7 +242,19 @@ class TestStopLifecycle:
         queue = JobQueue(registry=registry)
         queue.add_job(SleepOnceJob, "race-stop-1", {})
         queue.start_job("race-stop-1")
-        time.sleep(0.2)
+
+        # Wait for the job to actually reach COMPLETED before attempting the
+        # racing stop_job call below. SleepOnceJob only sleeps for 0.05s once
+        # running, but a spawn-based child can take noticeably longer than
+        # that to start (fresh interpreter, package re-import), so a fixed
+        # sleep is not a reliable proxy for "already completed". Poll with a
+        # generous deadline instead of guessing a constant.
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            if queue.get_job_status("race-stop-1").status == JobStatus.COMPLETED:
+                break
+            time.sleep(0.02)
+
         with pytest.raises(InvalidJobStateError):
             queue.stop_job("race-stop-1", timeout=0.1)
         assert queue.get_job_status("race-stop-1").status == JobStatus.COMPLETED
@@ -316,7 +340,17 @@ class TestDeleteRetentionLifecycle:
         queue = JobQueue(registry=registry, completed_job_retention_seconds=3600.0)
         queue.add_job(LogThenLoopJob, "del-logs-1", {})
         queue.start_job("del-logs-1")
-        time.sleep(0.05)
+
+        # Wait for the child process to actually emit its log line before
+        # stopping/deleting. See test_stopped_job_logs_retained for why a
+        # fixed sleep is not reliable across start methods.
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            logs = queue.get_job_logs("del-logs-1")
+            if any("stop-log-line" in line for line in logs["stdout"]):
+                break
+            time.sleep(0.05)
+
         queue.stop_job("del-logs-1", timeout=15.0)
         queue.delete_job("del-logs-1")
         logs = queue.get_job_logs("del-logs-1")

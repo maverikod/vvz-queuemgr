@@ -8,19 +8,28 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
-from multiprocessing import Manager
 from typing import Dict, Any
+
+from queuemgr.mp_context import get_mp_context
 
 
 def get_manager() -> Dict[str, Any]:
     """
     Return a process-shared Manager instance for the queue runtime.
 
+    The manager is created from the queuemgr-local multiprocessing context
+    (see queuemgr.mp_context.get_mp_context) rather than the default
+    ``multiprocessing.Manager()``. The default Manager() call implicitly
+    spawns its server process using the process-wide default start method;
+    routing it through the local context keeps it consistent with the
+    Process/Queue/Event objects used elsewhere in the package and avoids an
+    unexpected fork of a host application (e.g. a live asyncio server).
+
     Returns:
-        Manager: A multiprocessing Manager instance for creating shared
+        Manager: A multiprocessing SyncManager instance for creating shared
         objects.
     """
-    return Manager()
+    return get_mp_context().Manager()
 
 
 def create_job_shared_state(manager: Dict[str, Any]) -> Dict[str, Any]:

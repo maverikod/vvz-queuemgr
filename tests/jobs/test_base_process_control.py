@@ -5,7 +5,8 @@ Author: Vasiliy Zdanovskiy
 email: vasilyvz@gmail.com
 """
 
-import multiprocessing
+import subprocess
+import sys
 import time
 import pytest
 from unittest.mock import Mock, patch
@@ -41,7 +42,9 @@ class TestQueueJobBaseProcessControl:
         """Test successful process start."""
         job = TestJob("test-job-1", {})
 
-        with patch("queuemgr.jobs.base_core.Process") as mock_process_class:
+        with patch("queuemgr.jobs.base_core.get_mp_context") as mock_get_mp_context:
+            mock_process_class = Mock()
+            mock_get_mp_context.return_value.Process = mock_process_class
             mock_process = Mock()
             mock_process_class.return_value = mock_process
 
@@ -76,7 +79,9 @@ class TestQueueJobBaseProcessControl:
         """Test process start failure."""
         job = TestJob("test-job-1", {})
 
-        with patch("queuemgr.jobs.base_core.Process") as mock_process_class:
+        with patch("queuemgr.jobs.base_core.get_mp_context") as mock_get_mp_context:
+            mock_process_class = Mock()
+            mock_get_mp_context.return_value.Process = mock_process_class
             mock_process = Mock()
             mock_process.start.side_effect = Exception("Start failed")
             mock_process_class.return_value = mock_process
@@ -177,21 +182,33 @@ class TestQueueJobBaseProcessControl:
             job.terminate_process()
 
     def test_start_process_spawn_mode(self):
-        """Test process start in spawn mode (CUDA compatibility)."""
-        # Set spawn mode
-        original_method = multiprocessing.get_start_method(allow_none=True)
+        """
+        Test that job processes always use queuemgr's local spawn context.
+
+        queuemgr never calls ``multiprocessing.set_start_method`` (that would
+        mutate global, process-wide state shared with the host application).
+        Instead it uses a package-local context created via
+        ``multiprocessing.get_context`` (see ``queuemgr.mp_context``), which
+        defaults to "spawn" regardless of whatever the global default start
+        method happens to be. This test verifies the job process is actually
+        a ``SpawnProcess`` (the concrete class multiprocessing uses for the
+        spawn start method) and executes correctly end-to-end.
+        """
+        job = TestJob("test-job-spawn", {"test_param": "test_value"})
+
+        # Set up shared state
+        manager = get_manager()
+        shared_state = create_job_shared_state(manager)
+        job._set_shared_state(shared_state)
+
+        # Start process
+        job.start_process()
+
         try:
-            multiprocessing.set_start_method("spawn", force=True)
-
-            job = TestJob("test-job-spawn", {"test_param": "test_value"})
-
-            # Set up shared state
-            manager = get_manager()
-            shared_state = create_job_shared_state(manager)
-            job._set_shared_state(shared_state)
-
-            # Start process
-            job.start_process()
+            # The concrete Process class name reveals the start method that
+            # was actually used, independent of whatever the global default
+            # start method is configured to on this interpreter/platform.
+            assert type(job._process).__name__ == "SpawnProcess"
 
             # Wait a bit for process to start
             time.sleep(0.1)
@@ -200,7 +217,7 @@ class TestQueueJobBaseProcessControl:
             assert job.is_running()
 
             # Wait for process to complete
-            job._process.join(timeout=2.0)
+            job._process.join(timeout=5.0)
 
             # Verify process completed
             assert not job.is_running()
@@ -211,10 +228,50 @@ class TestQueueJobBaseProcessControl:
                 JobStatus.COMPLETED,
                 JobStatus.PENDING,
             ]  # May be pending if execute() does nothing
-
         finally:
-            # Restore original start method
-            if original_method:
-                multiprocessing.set_start_method(original_method, force=True)
-            else:
-                multiprocessing.set_start_method("fork", force=True)
+            if job.is_running():
+                job.terminate_process(force=True)
+
+    def test_start_process_spawn_independent_of_global_start_method(self):
+        """
+        Test that job spawn behavior does not depend on the global default.
+
+        Runs in an isolated child interpreter (via subprocess) that mutates
+        the *global* multiprocessing start method to "fork" with
+        ``set_start_method(..., force=True)`` before starting a queuemgr job.
+        Because queuemgr resolves its own context via
+        ``queuemgr.mp_context.get_mp_context()`` instead of relying on the
+        global default, the job process must still be a spawn-based process:
+        the child does not inherit a mutated module-level default from
+        whatever else runs in that interpreter.
+        """
+        script = (
+            "import multiprocessing\n"
+            "multiprocessing.set_start_method('fork', force=True)\n"
+            "from queuemgr.jobs.base import QueueJobBase\n"
+            "from queuemgr.core.ipc_manager import create_job_shared_state, get_manager\n"
+            "\n"
+            "class Job(QueueJobBase):\n"
+            "    def execute(self):\n"
+            "        pass\n"
+            "\n"
+            "job = Job('subprocess-job', {})\n"
+            "manager = get_manager()\n"
+            "shared_state = create_job_shared_state(manager)\n"
+            "job._set_shared_state(shared_state)\n"
+            "job.start_process()\n"
+            "print(type(job._process).__name__)\n"
+            "job._process.join(timeout=5.0)\n"
+        )
+
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 0, (
+            f"subprocess failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "SpawnProcess" in result.stdout.splitlines()

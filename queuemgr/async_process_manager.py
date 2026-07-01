@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional, Callable, List
 from contextlib import asynccontextmanager
 
 from queuemgr.core.exceptions import ProcessControlError
+from queuemgr.mp_context import get_mp_context
 from .process_config import ProcessManagerConfig
 from .async_process_runner import run_async_process_manager
 from .async_process_manager_commands import (
@@ -59,13 +60,17 @@ class AsyncProcessManager:
                 "manager", "start", "Process manager is already running"
             )
 
-        # Create communication queues
-        self._control_queue = Queue()
-        self._response_queue = Queue()
-        self._shutdown_event = Event()
+        # Create communication queues from the local mp context. Queue/Event
+        # objects must come from the same context as the Process below: a
+        # SemLock created under one start method may not be reconstructible
+        # in a child started with a different one.
+        mp_context = get_mp_context()
+        self._control_queue = mp_context.Queue()
+        self._response_queue = mp_context.Queue()
+        self._shutdown_event = mp_context.Event()
 
         # Start the manager process
-        self._process = Process(
+        self._process = mp_context.Process(
             target=run_async_process_manager,
             name="AsyncQueueManager",
             args=(

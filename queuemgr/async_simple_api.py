@@ -10,7 +10,9 @@ email: vasilyvz@gmail.com
 
 import asyncio
 import logging
+import multiprocessing
 import signal
+import threading
 from typing import Dict, Any, Optional, Type, List
 from contextlib import asynccontextmanager
 
@@ -381,6 +383,13 @@ async def get_global_async_queue() -> AsyncQueueSystem:
     """
     Get the global async queue system instance.
 
+    On first call, this also installs SIGTERM/SIGINT cleanup handlers for
+    the global queue (see ``_setup_async_cleanup``). Handler installation is
+    guarded so it only happens in the main thread of the top-level process:
+    child job/manager processes (started under the queuemgr-local spawn
+    context) re-import this module but must not install signal handlers or
+    overwrite handlers belonging to a host application.
+
     Returns:
         The global async queue system instance.
 
@@ -390,6 +399,7 @@ async def get_global_async_queue() -> AsyncQueueSystem:
     global _global_async_queue
 
     if _global_async_queue is None:
+        _setup_async_cleanup()
         _global_async_queue = AsyncQueueSystem()
         await _global_async_queue.start()
 
@@ -416,10 +426,31 @@ async def _cleanup_handler():
 
 
 # Register cleanup for different signal types
-def _setup_async_cleanup():
-    """Setup async cleanup handlers."""
+def _setup_async_cleanup() -> None:
+    """
+    Install SIGTERM/SIGINT handlers that shut down the global async queue.
+
+    This is deliberately NOT called at module import time. queuemgr child
+    processes (job/manager processes started under the local spawn context,
+    see queuemgr.mp_context) re-import this module in a fresh interpreter,
+    and installing signal handlers there would either raise (signal handlers
+    can only be set from the main thread) or, worse, silently replace
+    handlers owned by unrelated code running in that child. It is called
+    lazily from ``get_global_async_queue`` instead, once, right before the
+    global queue is created.
+
+    Only registers handlers when running in the main thread of a top-level
+    process (i.e. not inside a multiprocessing child), matching the
+    semantics ``signal.signal`` itself enforces. ``ValueError`` raised by
+    ``signal.signal`` outside the main thread is swallowed for the same
+    reason.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        return
+    if multiprocessing.parent_process() is not None:
+        return
+
     try:
-        # Only register if we're in the main thread
         if hasattr(signal, "SIGTERM"):
             signal.signal(
                 signal.SIGTERM, lambda s, f: asyncio.create_task(_cleanup_handler())
@@ -429,10 +460,6 @@ def _setup_async_cleanup():
                 signal.SIGINT, lambda s, f: asyncio.create_task(_cleanup_handler())
             )
     except ValueError:
-        # Signals can only be registered in the main thread
-        # This is expected in some contexts, so we ignore the error
+        # Signals can only be registered in the main thread.
+        # This is expected in some contexts, so we ignore the error.
         pass
-
-
-# Setup cleanup on module import
-_setup_async_cleanup()

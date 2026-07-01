@@ -10,7 +10,7 @@ email: vasilyvz@gmail.com
 
 import sys
 from abc import ABC, abstractmethod
-from multiprocessing import Process
+from multiprocessing.process import BaseProcess
 from typing import Dict, Any, Optional, Union, List, Type
 
 from queuemgr.core.registry import JsonlRegistry
@@ -28,6 +28,7 @@ from queuemgr.constants import (
     DESCRIPTION_JOB_STOPPED,
 )
 from queuemgr.exceptions import ValidationError, ProcessControlError
+from queuemgr.mp_context import get_mp_context
 from .log_capture import LogCapture
 
 
@@ -60,7 +61,7 @@ class QueueJobBase(ABC):
         self.params = params
         self._registry: Optional[JsonlRegistry] = None  # Will be set by the queue
         self._shared_state: Optional[Dict[str, Any]] = None  # Will be set by the queue
-        self._process: Optional[Process] = None
+        self._process: Optional[BaseProcess] = None
         self.error: Optional[Exception] = None
 
     @abstractmethod
@@ -215,9 +216,15 @@ class QueueJobBase(ABC):
             raise ProcessControlError(self.job_id, "start", "Job is already running")
 
         try:
+            # Resolve the Process class from the queuemgr-local mp context at
+            # call time (not at import time), so that QUEUEMGR_MP_START_METHOD
+            # is honored even if it changes after ``import queuemgr`` and so
+            # that a bogus value only raises when a process is actually
+            # started, not merely on import.
+            process_cls = get_mp_context().Process
             # Use static method wrapper for spawn mode compatibility
             # This ensures proper pickling/unpickling in child process
-            self._process = Process(
+            self._process = process_cls(
                 target=self._job_loop_static,
                 args=(
                     self.__class__,

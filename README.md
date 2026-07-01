@@ -11,6 +11,26 @@ A Python-based job queue system with per-job processes and signal variables.
 - **Progress Tracking**: Real-time progress updates and status monitoring
 - **Error Handling**: Comprehensive error handling and recovery mechanisms
 
+## Multiprocessing start method
+
+queuemgr creates every job/manager process from its own local
+``multiprocessing`` context (see ``queuemgr/mp_context.py``) instead of
+relying on the process-wide default. That context defaults to **spawn**,
+which does not fork the calling process and therefore does not duplicate
+live threads, open sockets, or an in-flight asyncio event loop (e.g. a
+running asyncio/hypercorn server) into the child.
+
+queuemgr never calls ``multiprocessing.set_start_method``, so it does not
+read or mutate the global default start method used by your application or
+other libraries. If you need a different method (for example because your
+deployment environment cannot use "spawn"), set the
+``QUEUEMGR_MP_START_METHOD`` environment variable to ``"spawn"``,
+``"forkserver"``, or ``"fork"`` before queuemgr creates its first process.
+
+```bash
+export QUEUEMGR_MP_START_METHOD=forkserver
+```
+
 ## Installation
 
 ```bash
