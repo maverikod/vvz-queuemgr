@@ -635,7 +635,7 @@ def check_svo_chunker(ssh_target: str, host: str) -> ServiceReport:
     else:
         report.add("queuemgr_version", "WAITING", f"{queuemgr_v} < {MIN_QUEUEMGR_VERSION} (deploy pending)")
 
-    expected = "0.2.11"
+    expected = "0.2.12"
     if service_version:
         try:
             newer = pkg_version.parse(service_version) >= pkg_version.parse(expected)
