@@ -168,7 +168,58 @@ def run_ssh(ssh_target: str, remote_cmd: str, timeout: int = 20) -> Tuple[int, s
         return 127, "", "ssh binary not found"
 
 
+# When set, HTTP probes are executed as `ssh <target> curl https://127.0.0.1:<port>`
+# from the production host itself, instead of connecting directly. This is
+# required because casmgr (15010) and ai-editor (15000) — like svo (8009) — are
+# firewalled off the LAN by design (network is the access-control layer; the
+# services run plain https, not mTLS). Loopback on the host still reaches them,
+# which reflects true service health without depending on external reachability.
+_LOOPBACK_SSH: Optional[str] = None
+_LOOPBACK_EXTERNAL_HOST: Optional[str] = None
+
+
+def _loopback_url(url: str) -> str:
+    """Rewrite the external host in a URL to 127.0.0.1 for on-host probing."""
+    if _LOOPBACK_EXTERNAL_HOST and f"//{_LOOPBACK_EXTERNAL_HOST}:" in url:
+        return url.replace(f"//{_LOOPBACK_EXTERNAL_HOST}:", "//127.0.0.1:", 1)
+    return url
+
+
+def _curl_over_ssh(url: str, method: str, payload: Optional[Dict[str, Any]],
+                   timeout: float) -> Tuple[Optional[int], Any, Optional[str]]:
+    target = _LOOPBACK_SSH
+    assert target is not None
+    loop_url = _loopback_url(url)
+    parts = ["curl", "-sk", "--max-time", str(int(timeout)),
+             "-w", "\\n%{http_code}", "-o", "-"]
+    if method == "POST":
+        parts += ["-X", "POST", "-H", "Content-Type: application/json",
+                  "--data", json.dumps(payload or {})]
+    parts.append(loop_url)
+    remote_cmd = " ".join(shlex.quote(p) for p in parts)
+    rc, out, err = run_ssh(target, remote_cmd, timeout=int(timeout) + 10)
+    if rc != 0 and not out:
+        return None, None, err or f"ssh curl rc={rc}"
+    text = out.rstrip("\n")
+    nl = text.rfind("\n")
+    if nl == -1:
+        code_str, body_text = text.strip(), ""
+    else:
+        body_text, code_str = text[:nl], text[nl + 1:].strip()
+    try:
+        status_code: Optional[int] = int(code_str)
+    except ValueError:
+        status_code = None
+    try:
+        body: Any = json.loads(body_text)
+    except (ValueError, TypeError):
+        body = body_text
+    return status_code, body, None
+
+
 def http_get(url: str, timeout: float = 10.0) -> Tuple[Optional[int], Any, Optional[str]]:
+    if _LOOPBACK_SSH:
+        return _curl_over_ssh(url, "GET", None, timeout)
     try:
         resp = requests.get(url, timeout=timeout, verify=False)
         try:
@@ -181,6 +232,8 @@ def http_get(url: str, timeout: float = 10.0) -> Tuple[Optional[int], Any, Optio
 
 
 def http_post_json(url: str, payload: Dict[str, Any], timeout: float = 30.0) -> Tuple[Optional[int], Any, Optional[str]]:
+    if _LOOPBACK_SSH:
+        return _curl_over_ssh(url, "POST", payload, timeout)
     try:
         resp = requests.post(url, json=payload, timeout=timeout, verify=False)
         try:
@@ -732,7 +785,19 @@ def main() -> int:
     parser.add_argument("--ssh", default=DEFAULT_SSH_TARGET, help="ssh target for host-side introspection (default: %(default)s)")
     parser.add_argument("--json", default=None, help="also write a JSON report to this path")
     parser.add_argument("--only", default=None, help="comma-separated subset of services to check")
+    parser.add_argument("--direct", action="store_true",
+                        help="probe services directly over the network instead of via "
+                             "SSH loopback on the host (default: loopback, because casmgr/"
+                             "ai-editor/svo ports are firewalled off the LAN by design)")
     args = parser.parse_args()
+
+    # Default to on-host loopback probing: the service ports are deliberately not
+    # reachable from the LAN (network is the access-control layer), so a direct
+    # probe would report false FAILs. --direct forces the old external behavior.
+    if not args.direct:
+        global _LOOPBACK_SSH, _LOOPBACK_EXTERNAL_HOST
+        _LOOPBACK_SSH = args.ssh
+        _LOOPBACK_EXTERNAL_HOST = args.host
 
     services = list(SERVICE_CHECKS.keys())
     if args.only:
