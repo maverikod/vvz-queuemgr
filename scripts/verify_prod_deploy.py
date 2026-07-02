@@ -525,7 +525,7 @@ def check_ai_editor(ssh_target: str, host: str) -> ServiceReport:
     base_url = f"https://{host}:15000"
     verify_generic_https_service(
         report, base_url,
-        expected_service_version="1.0.43",
+        expected_service_version="1.0.44",
         adapter_version_installed=adapter_v,
         queuemgr_version_installed=queuemgr_v,
         service_version_installed=service_version,
@@ -582,11 +582,16 @@ def check_svo_chunker(ssh_target: str, host: str) -> ServiceReport:
     else:
         report.add("queuemgr_version", "WAITING", f"{queuemgr_v} < {MIN_QUEUEMGR_VERSION} (deploy pending)")
 
-    expected = "0.2.10"
-    if service_version == expected:
-        report.add("service_version", "PASS", service_version)
-    elif service_version:
-        report.add("service_version", "WAITING", f"installed={service_version} expected={expected} (deploy pending)")
+    expected = "0.2.11"
+    if service_version:
+        try:
+            newer = pkg_version.parse(service_version) >= pkg_version.parse(expected)
+        except Exception:
+            newer = service_version == expected
+        if newer:
+            report.add("service_version", "PASS", f"{service_version} (>= expected {expected})")
+        else:
+            report.add("service_version", "WAITING", f"installed={service_version} expected={expected} (deploy pending)")
     else:
         report.add("service_version", "FAIL", "could not determine installed service version")
 
